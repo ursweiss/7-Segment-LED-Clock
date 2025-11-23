@@ -18,6 +18,7 @@
  */
 
 #include "ConfigStorage.h"
+#include "Logger.h"
 #include <LittleFS.h>
 
 uint16_t calcChecksum(const uint8_t* data, uint16_t length) {
@@ -31,23 +32,23 @@ uint16_t calcChecksum(const uint8_t* data, uint16_t length) {
 bool loadClockConfig(ClockConfig& config) {
   File file = LittleFS.open(CONFIG_FILE, "r");
   if (!file) {
-    Serial.println("Config file not found");
+    LOG_DEBUG("Config file not found");
     return false;
   }
   memset(&config, 0, sizeof(ClockConfig));
   size_t bytesRead = file.readBytes((char*)&config, sizeof(ClockConfig));
   file.close();
   if (bytesRead != sizeof(ClockConfig)) {
-    Serial.println("Config file size mismatch");
+    LOG_WARN("Config file size mismatch");
     return false;
   }
   uint16_t savedChecksum = config.checksum;
   uint16_t calculatedChecksum = calcChecksum((uint8_t*)&config, sizeof(ClockConfig) - sizeof(config.checksum));
   if (savedChecksum != calculatedChecksum) {
-    Serial.println("Config checksum mismatch");
+    LOG_ERROR("Config checksum mismatch");
     return false;
   }
-  Serial.println("Config loaded successfully");
+  LOG_DEBUG("Config loaded successfully");
   return true;
 }
 
@@ -56,15 +57,15 @@ bool saveClockConfig(const ClockConfig& config) {
   tempConfig.checksum = calcChecksum((uint8_t*)&tempConfig, sizeof(ClockConfig) - sizeof(tempConfig.checksum));
   File file = LittleFS.open(CONFIG_FILE, "w");
   if (!file) {
-    Serial.println("Failed to open config file for writing");
+    LOG_ERROR("Failed to open config file for writing");
     return false;
   }
   size_t bytesWritten = file.write((uint8_t*)&tempConfig, sizeof(ClockConfig));
   file.close();
   if (bytesWritten != sizeof(ClockConfig)) {
-    Serial.println("Failed to write complete config");
+    LOG_ERROR("Failed to write complete config");
     return false;
   }
-  Serial.println("Config saved successfully");
+  LOG_DEBUG("Config saved successfully");
   return true;
 }

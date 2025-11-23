@@ -18,6 +18,7 @@
  */
 
 #include "LED_Clock.h"
+#include "Logger.h"
 #include <ESP32Time.h>
 
 // Global variables

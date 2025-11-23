@@ -22,6 +22,7 @@
 #include <TaskScheduler.h>
 #include <ESP32Time.h>
 #include "config.h"
+#include "Logger.h"
 #include "LED_Clock.h"
 #include "WiFi_Manager.h"
 #include "Weather.h"
@@ -65,31 +66,23 @@ void updateClockCallback() {
 Task taskUpdateClock(100, TASK_FOREVER, &updateClockCallback);
 
 void setup() {
-  #ifdef DEBUG
-  Serial.begin(115200);
-  while (!Serial);
-  delay(200);
-  Serial.println("\n7-Segment LED Clock");
-  Serial.println("===================");
-  #endif
+  initLogger();
+  LOG_INFO("7-Segment LED Clock Starting...");
   initLEDs();
   if (!initWiFiManager()) {
-    #ifdef DEBUG
-    Serial.println("WiFi initialization failed");
-    #endif
+    LOG_ERROR("WiFi initialization failed");
     displayError(1);
     delay(5000);
     ESP.restart();
   }
   syncRTCWithNTP(rtc);
+  setLoggerRTC(&rtc);
   if (owmTempEnabled) {
     fetchWeather();
   }
   taskScheduler.addTask(taskUpdateClock);
   taskUpdateClock.enable();
-  #ifdef DEBUG
-  Serial.println("Setup complete");
-  #endif
+  LOG_INFO("Setup complete");
 }
 
 void loop() {

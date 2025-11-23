@@ -18,6 +18,7 @@
  */
 
 #include "config.h"
+#include "Logger.h"
 #include "WiFi_Manager.h"
 #include "LED_Clock.h"
 #include "ConfigStorage.h"
@@ -50,41 +51,30 @@ const char* ntpServer2 = "time.nist.gov";
 const char* ntpServer3 = "time.google.com";
 
 void configureNTP() {
-  Serial.println("=== Configuring NTP ===");
-  Serial.print("Timezone name: ");
-  Serial.println(timezoneNameString.length() > 0 ? timezoneNameString : "EMPTY");
-  Serial.print("Timezone string: ");
-  Serial.println(timezoneString.length() > 0 ? timezoneString : "EMPTY");
+  LOG_INFO("Configuring NTP...");
+  LOG_DEBUGF("Timezone name: %s", timezoneNameString.length() > 0 ? timezoneNameString.c_str() : "EMPTY");
+  LOG_DEBUGF("Timezone string: %s", timezoneString.length() > 0 ? timezoneString.c_str() : "EMPTY");
   if (timezoneString.length() > 0) {
-    Serial.print("Applying timezone with configTzTime: ");
-    Serial.println(timezoneString);
+    LOG_INFOF("Applying timezone: %s", timezoneString.c_str());
     configTzTime(timezoneString.c_str(), ntpServer1, ntpServer2, ntpServer3);
   } else {
-    Serial.println("WARNING: No timezone set, using UTC");
+    LOG_WARN("No timezone set, using UTC");
     configTime(0, 0, ntpServer1, ntpServer2, ntpServer3);
   }
-  Serial.println("=== NTP configured ===");
+  LOG_INFO("NTP configured");
 }
 
 bool initWiFiManager() {
-  #ifdef DEBUG
-  Serial.begin(115200);
-  while (!Serial);
-  Serial.println("\n7-Segment LED Clock Starting...");
-  #endif
   if (FORMAT_FILESYSTEM) {
-    #ifdef DEBUG
-    Serial.println("Formatting filesystem...");
-    #endif
+    LOG_WARN("Formatting filesystem...");
     LittleFS.format();
   }
   if (!LittleFS.begin(true)) {
-    #ifdef DEBUG
-    Serial.println("LittleFS mount failed");
-    #endif
+    LOG_ERROR("LittleFS mount failed");
     return false;
   }
   drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
+  LOG_INFO("Initialize");
   displayStatus(1);
   delay(1000);
   webServer = new AsyncWebServer(HTTP_PORT);
@@ -95,104 +85,73 @@ bool initWiFiManager() {
   String apPassword = portalPassword;
   String storedSSID = wifiManager->WiFi_SSID();
   String storedPass = wifiManager->WiFi_Pass();
-  Serial.println("=== Loading saved timezone ===");
+  LOG_DEBUG("Loading saved timezone");
   ClockConfig clockConfig;
   if (loadClockConfig(clockConfig)) {
     if (strlen(clockConfig.TZ_Name) > 0) {
       timezoneNameString = String(clockConfig.TZ_Name);
       timezoneString = String(clockConfig.TZ);
-      Serial.print("Loaded from file - TZ_Name: ");
-      Serial.print(timezoneNameString);
-      Serial.print(", TZ: ");
-      Serial.println(timezoneString);
+      LOG_DEBUGF("Loaded from file - TZ_Name: %s, TZ: %s", timezoneNameString.c_str(), timezoneString.c_str());
     } else {
-      Serial.println("Config file has no timezone");
+      LOG_DEBUG("Config file has no timezone");
     }
   } else {
-    Serial.println("No saved config file found");
+    LOG_DEBUG("No saved config file found");
   }
-  Serial.println("=== Timezone load complete ===");
-  #ifdef DEBUG
   if (storedSSID != "" && storedPass != "") {
-    Serial.println("Found stored WiFi credentials");
+    LOG_INFO("Found stored WiFi credentials");
   } else {
-    Serial.println("No stored WiFi credentials found");
+    LOG_INFO("No stored WiFi credentials found");
   }
-  #endif
   if ((storedSSID == "") || (storedPass == "")) {
-    #ifdef DEBUG
-    Serial.println("No stored credentials - entering config portal");
-    #endif
+    LOG_WARN("No stored credentials - entering config portal");
     initialConfig = true;
   }
   if (drd->detectDoubleReset()) {
-    #ifdef DEBUG
-    Serial.println("Double Reset Detected - entering config portal");
-    #endif
+    LOG_INFO("Double Reset Detected - entering config portal");
     initialConfig = true;
     wifiManager->setConfigPortalTimeout(0);
   } else {
-    #ifdef DEBUG
-    Serial.println("No Double Reset Detected");
-    #endif
+    LOG_DEBUG("No Double Reset Detected");
     if (storedSSID != "" && storedPass != "") {
       wifiManager->setConfigPortalTimeout(15);
     }
   }
   if (initialConfig) {
     displayStatus(2);
-    #ifdef DEBUG
-    Serial.print("Starting config portal - SSID: ");
-    Serial.print(apSSID);
-    Serial.print(", IP: 192.168.4.1");
-    #endif
+    LOG_INFOF("Starting config portal - SSID: %s, IP: 192.168.4.1", apSSID.c_str());
     if (!wifiManager->startConfigPortal(apSSID.c_str(), apPassword.c_str())) {
-      #ifdef DEBUG
-      Serial.println("\nConfig portal timeout - restarting");
-      #endif
+      LOG_WARN("Config portal timeout - restarting");
       delay(3000);
       ESP.restart();
     }
-    Serial.println("=== Config portal completed ===");
     timezoneNameString = wifiManager->getTimezoneName();
-    Serial.print("Timezone from portal: ");
-    Serial.println(timezoneNameString.length() > 0 ? timezoneNameString : "EMPTY");
+    LOG_DEBUGF("Timezone from portal: %s", timezoneNameString.length() > 0 ? timezoneNameString.c_str() : "EMPTY");
     if (timezoneNameString.length() > 0) {
       const char* tzResult = wifiManager->getTZ(timezoneNameString);
       if (tzResult != nullptr && strlen(tzResult) > 0) {
         timezoneString = String(tzResult);
-        Serial.print("Converted to POSIX TZ: ");
-        Serial.println(timezoneString);
+        LOG_DEBUGF("Converted to POSIX TZ: %s", timezoneString.c_str());
         ClockConfig clockConfig;
         memset(&clockConfig, 0, sizeof(ClockConfig));
         strncpy(clockConfig.TZ_Name, timezoneNameString.c_str(), TZNAME_MAX_LEN - 1);
         strncpy(clockConfig.TZ, timezoneString.c_str(), TIMEZONE_MAX_LEN - 1);
         saveClockConfig(clockConfig);
       } else {
-        Serial.println("ERROR: getTZ() returned null or empty");
+        LOG_ERROR("getTZ() returned null or empty");
       }
     }
-    Serial.println("=== Portal timezone update complete ===");
   } else {
     displayStatus(3);
-    #ifdef DEBUG
-    Serial.println("Connecting to saved WiFi...");
-    #endif
+    LOG_INFO("Connecting to saved WiFi...");
     if (!wifiManager->autoConnect(apSSID.c_str(), apPassword.c_str())) {
-      #ifdef DEBUG
-      Serial.println("AutoConnect failed - restarting");
-      #endif
+      LOG_ERROR("AutoConnect failed - restarting");
       delay(3000);
       ESP.restart();
     }
   }
   if (WiFi.status() == WL_CONNECTED) {
-    #ifdef DEBUG
-    Serial.print("WiFi connected - SSID: ");
-    Serial.print(WiFi.SSID());
-    Serial.print(", IP: ");
-    Serial.println(WiFi.localIP());
-    #endif
+    LOG_INFOF("WiFi connected - SSID: %s, IP: %s", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
     configureNTP();
     return true;
   }
@@ -202,9 +161,7 @@ bool initWiFiManager() {
 void checkWiFiStatus() {
   drd->loop();
   if (WiFi.status() != WL_CONNECTED) {
-    #ifdef DEBUG
-    Serial.println("WiFi disconnected, attempting reconnect...");
-    #endif
+    LOG_DEBUG("WiFi disconnected, attempting reconnect...");
     WiFi.reconnect();
   }
 }
@@ -214,19 +171,18 @@ bool isWiFiConnected() {
 }
 
 void syncRTCWithNTP(ESP32Time& rtc) {
-  #ifdef DEBUG
-  Serial.println("Syncing RTC with NTP...");
-  #endif
+  LOG_INFO("Syncing RTC with NTP...");
   struct tm timeinfo;
   if (getLocalTime(&timeinfo, 10000)) {
     rtc.setTimeStruct(timeinfo);
-    #ifdef DEBUG
-    Serial.print("RTC synced: ");
-    Serial.println(rtc.getTime("%Y-%m-%d %H:%M:%S"));
-    #endif
+    LOG_INFOF("RTC synced: %04d-%02d-%02d %02d:%02d:%02d",
+              timeinfo.tm_year + 1900,
+              timeinfo.tm_mon + 1,
+              timeinfo.tm_mday,
+              timeinfo.tm_hour,
+              timeinfo.tm_min,
+              timeinfo.tm_sec);
   } else {
-    #ifdef DEBUG
-    Serial.println("Failed to sync RTC with NTP");
-    #endif
+    LOG_ERROR("NTP sync failed - timeout");
   }
 }

@@ -18,6 +18,8 @@
  */
 
 #include "Weather.h"
+#include "Logger.h"
+#include "config.h"
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
@@ -27,57 +29,35 @@ void fetchWeather() {
   if (!owmTempEnabled) {
     return;
   }
-  #ifdef DEBUG
-  Serial.println("Fetching weather from OpenWeatherMap...");
-  #endif
+  LOG_INFO("Fetching weather from OpenWeatherMap...");
   HTTPClient http;
   String url = "http://" + owmApiServer + "/data/2.5/forecast?q=" + owmLocation + "&appid=" + owmApiKey + "&cnt=1&units=" + owmUnits;
-  #ifdef DEBUG
-  Serial.print("URL: ");
-  Serial.println(url);
-  #endif
+  LOG_DEBUGF("API URL: %s", url.c_str());
   http.begin(url);
   int httpCode = http.GET();
   if (httpCode > 0) {
     if (httpCode == HTTP_CODE_OK) {
       String payload = http.getString();
-      #ifdef DEBUG
-      Serial.println("Response received");
-      #endif
+      LOG_DEBUG("API response received");
       StaticJsonDocument<5000> jsonBuffer;
       DeserializationError error = deserializeJson(jsonBuffer, payload);
       if (error) {
-        #ifdef DEBUG
-        Serial.print("JSON parsing failed: ");
-        Serial.println(error.c_str());
-        #endif
+        LOG_ERRORF("Weather JSON parsing failed: %s", error.c_str());
         http.end();
         return;
       }
       if (jsonBuffer.containsKey("list") && jsonBuffer["list"].size() > 0) {
         float tempRaw = jsonBuffer["list"][0]["main"]["temp"];
         owmTemperature = round(tempRaw);
-        #ifdef DEBUG
-        Serial.print("Temperature: ");
-        Serial.print(owmTemperature);
-        Serial.println(owmUnits == "metric" ? "°C" : "°F");
-        #endif
+        LOG_INFOF("Temperature: %d%s", owmTemperature, owmUnits == "metric" ? "°C" : "°F");
       } else {
-        #ifdef DEBUG
-        Serial.println("Invalid JSON structure");
-        #endif
+        LOG_ERROR("Weather API returned invalid JSON structure");
       }
     } else {
-      #ifdef DEBUG
-      Serial.print("HTTP error code: ");
-      Serial.println(httpCode);
-      #endif
+      LOG_WARNF("Weather API HTTP error: %d", httpCode);
     }
   } else {
-    #ifdef DEBUG
-    Serial.print("HTTP request failed: ");
-    Serial.println(http.errorToString(httpCode));
-    #endif
+    LOG_ERRORF("Weather API request failed: %s", http.errorToString(httpCode).c_str());
   }
   http.end();
 }
