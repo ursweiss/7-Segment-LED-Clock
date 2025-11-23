@@ -1,0 +1,70 @@
+/*
+ * This file is part of the 7 Segment LED Clock Project
+ * (https://www.prusaprinters.org/prints/68013-7-segment-led-clock).
+ *
+ * Copyright (c) 2021 Urs Weiss.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "ConfigStorage.h"
+#include <LittleFS.h>
+
+uint16_t calcChecksum(const uint8_t* data, uint16_t length) {
+  uint16_t checksum = 0;
+  for (uint16_t i = 0; i < length; i++) {
+    checksum += data[i];
+  }
+  return checksum;
+}
+
+bool loadClockConfig(ClockConfig& config) {
+  File file = LittleFS.open(CONFIG_FILE, "r");
+  if (!file) {
+    Serial.println("Config file not found");
+    return false;
+  }
+  memset(&config, 0, sizeof(ClockConfig));
+  size_t bytesRead = file.readBytes((char*)&config, sizeof(ClockConfig));
+  file.close();
+  if (bytesRead != sizeof(ClockConfig)) {
+    Serial.println("Config file size mismatch");
+    return false;
+  }
+  uint16_t savedChecksum = config.checksum;
+  uint16_t calculatedChecksum = calcChecksum((uint8_t*)&config, sizeof(ClockConfig) - sizeof(config.checksum));
+  if (savedChecksum != calculatedChecksum) {
+    Serial.println("Config checksum mismatch");
+    return false;
+  }
+  Serial.println("Config loaded successfully");
+  return true;
+}
+
+bool saveClockConfig(const ClockConfig& config) {
+  ClockConfig tempConfig = config;
+  tempConfig.checksum = calcChecksum((uint8_t*)&tempConfig, sizeof(ClockConfig) - sizeof(tempConfig.checksum));
+  File file = LittleFS.open(CONFIG_FILE, "w");
+  if (!file) {
+    Serial.println("Failed to open config file for writing");
+    return false;
+  }
+  size_t bytesWritten = file.write((uint8_t*)&tempConfig, sizeof(ClockConfig));
+  file.close();
+  if (bytesWritten != sizeof(ClockConfig)) {
+    Serial.println("Failed to write complete config");
+    return false;
+  }
+  Serial.println("Config saved successfully");
+  return true;
+}

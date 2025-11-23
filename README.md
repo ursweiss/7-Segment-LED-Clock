@@ -1,70 +1,247 @@
-# 7 Segment LED Clock
+# 7-Segment LED Clock - PlatformIO Migration
 
-Arduino code for my beautiful 3D printed LED clock in a retro 7 segment display style.
+This project has been successfully refactored from Arduino IDE to PlatformIO with modern libraries and clean modular architecture.
 
-You can find more details about the project and all downloadable files (STL, 3MF, STEP) [here](https://www.prusaprinters.org/prints/68013-7-segment-led-clock).
+## Project Structure
 
-**As the current Prusa contest "Timekeepers" is still running, please consider to give the print a like over there. Thank you <3**
+```
+7-Segment-LED-Clock/
+├── .github/
+│   └── copilot-instructions.md    # GitHub Copilot development guidelines
+├── _legacy/                        # Original Arduino sketch (DO NOT MODIFY)
+│   └── 7-Segment-LED-Clock/
+├── include/
+│   ├── config.h                    # Your configuration (gitignored)
+│   ├── config_rename.h             # Configuration template
+│   ├── LED_Clock.h                 # LED display and character mapping
+│   ├── WiFi_Manager.h              # WiFi and NTP configuration
+│   └── Weather.h                   # OpenWeatherMap API integration
+├── src/
+│   ├── main.cpp                    # Main program with TaskScheduler
+│   ├── LED_Clock.cpp               # LED display implementation
+│   ├── WiFi_Manager.cpp            # WiFi/NTP implementation
+│   └── Weather.cpp                 # Weather API implementation
+├── .gitignore
+└── platformio.ini                  # PlatformIO configuration
+```
+
+## Hardware
+
+- **Board**: ESP32-WROOM-32 (configured as `esp32dev`)
+- **LEDs**: 58 WS2812 RGB LEDs
+  - 4 characters × 7 segments × 2 LEDs = 56 LEDs
+  - 2 LEDs for colon/second indicator
+- **Data Pin**: GPIO 4 (configurable in `config.h`)
 
 ## Features
 
-* Diplaying time (obviously)
-  * Fancy rainbow effext or solid color
-  * Time set by NTP
-* Option to show the tempearature of a given location (Diplaying in °F is limited, as it can only display up to 99°F)
-  * Teperature is shown in color (blue => cold, red => hot) as it cannot display negative values
-* WiFi Manager for easy WLAN config
-  * Multiple access point credentials
-  * Double Reset Detection to start config portal after first configuration
+### ✅ Implemented
+- **WiFi Manager**: Auto-configuration portal with ESPAsync_WiFiManager
+- **Double Reset Detection**: Press reset twice within 10 seconds to enter config portal
+- **NTP Time Sync**: Automatic timezone-aware time synchronization
+- **7-Segment Display**: Custom character mapping for digits, letters, and symbols
+- **Color Modes**:
+  - SOLID: Single color (e.g., Green, Blue, Red)
+  - PALETTE: Rainbow/animated color palettes with per-character blending
+- **Second Indicator**: Blinking colon LEDs with configurable dimming
+- **OpenWeatherMap Integration**: Fetches temperature every hour
+- **Temperature Display**: Shows temp for 5 seconds at :30 past each minute
+- **Task Scheduling**: Replaced CronAlarms with TaskScheduler for reliability
 
-## Installation
+### 🔮 Future Enhancements
+- OTA (Over-The-Air) updates (code structure prepared)
+- Web interface for runtime configuration
+- Additional display modes and animations
 
-I highly recommend to use an ESP32 ([ESP32 DEVKITV1](https://www.aliexpress.com/item/4000152270368.html?spm=a2g0s.9042311.0.0.61af4c4dESOka0) / ESP-WROOM-32).
+## Setup Instructions
 
-The code should also work with an ESP8266, but never tested it. It could be that the compiled sketch is too big for an ESP8266.
+### 1. Install PlatformIO
+- Install [Visual Studio Code](https://code.visualstudio.com/)
+- Install [PlatformIO IDE extension](https://platformio.org/install/ide?install=vscode)
 
-If not already done, install the ESP32 boards as described [here](https://randomnerdtutorials.com/installing-the-esp32-board-in-arduino-ide-windows-instructions/).
+### 2. Configure Your Clock
+1. Copy `include/config_rename.h` to `include/config.h`
+2. Edit `include/config.h`:
+   ```cpp
+   // WiFi portal password
+   String portalPassword = "your_password";
+   
+   // OpenWeatherMap settings
+   String owmApiKey = "your_api_key";      // Get free key from openweathermap.org
+   String owmLocation = "YourCity,CC";     // e.g., "Zurich,CH"
+   
+   // LED brightness (0-255)
+   uint8_t ledBrightness = 128;
+   
+   // Color mode: 0 = SOLID, 1 = PALETTE
+   uint8_t clockColorMode = 1;
+   ```
 
-Download the code of this repository (Code ==> Download ZIP), unzip it and remove the "-master" at the end of the directory name.
+### 3. Build and Upload
+```bash
+# Build the project
+platformio run
 
-### Required libraries
+# Upload to ESP32
+platformio run --target upload
 
-Most libraries used can be installed using the Arduino IDE, but some have to be installed manually.
+# Monitor serial output
+platformio device monitor
+```
 
-#### Library Manager
+### 4. First-Time WiFi Setup
+1. Power on the ESP32
+2. Display shows "Load" then "ConF"
+3. Connect to WiFi network "LED-Clock-Config" (password from config.h)
+4. Browser opens to 192.168.4.1 (or open manually)
+5. Configure WiFi credentials and timezone
+6. Save and restart
 
-Install the following Libraries using the library manager in the Arduino IDE (Tools ==> Manage Libraries):
+### 5. Double Reset to Reconfigure
+- Press reset button twice within 10 seconds
+- Config portal reopens for reconfiguration
 
-* FastLED
-* ArduinoJson
-* CronAlarms
-* LittleFS_esp32
-* ESP_DoubleResetDetector
-* ESPAsync_WiFiManager (and all dependencies)
+## Libraries Used
 
-#### Manual Install
+All libraries are automatically managed by PlatformIO:
 
-Click on each of the following links and download the most current version (Code ==> Download ZIP). Close the Ardiono IDE if open, unzip the files, remove the "-master" at the end of the directory name and move the folders into the Arduino IDE library folder (on MacOS it's located at "~/Documents/Arduino/libraries" by default)
+| Library | Version | Purpose |
+|---------|---------|---------|
+| FastLED | ^3.6.0 | WS2812 RGB LED control |
+| ArduinoJson | ^6.21.4 | JSON parsing for weather API |
+| TaskScheduler | ^3.7.0 | Periodic task execution |
+| ESP_DoubleResetDetector | ^1.3.2 | Double reset detection |
+| AsyncTCP | ^1.1.1 | Async TCP for ESP32 |
+| ESPAsyncWebServer | latest | Async web server (from GitHub) |
+| ESPAsync_WiFiManager | ^1.15.1 | WiFi configuration portal |
 
-* [AsyncTCP](https://github.com/me-no-dev/AsyncTCP)
-* [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer)
+## Configuration Reference
 
+### Basic Settings
 
+#### WiFi
+- `portalPassword`: Password for config portal (default: "ledclock")
+- `portalSsid`: Config portal SSID (default: "LED-Clock-Config")
 
-## Configuration
+#### Clock Display
+- `clockColorMode`: 0 = SOLID, 1 = PALETTE
+- `clockColorSolid`: Color for SOLID mode (e.g., `CRGB::Green`)
+- `clockColorPalette`: Palette for PALETTE mode (RainbowColors_p, CloudColors_p, etc.)
+- `clockColorCharBlend`: Per-character color offset (0-255)
+- `clockColorBlending`: LINEARBLEND or NOBLEND
+- `clockSecIndicatorDiff`: Second indicator dimming (0-255, 0=disabled)
 
-Open the file "7-Segment-LED-Clock.ino" in the Ardiono IDE, select the file "config_rename.h" and rename it to "config.h".
+#### OpenWeatherMap
+- `owmApiServer`: API server (default: "api.openweathermap.org")
+- `owmApiKey`: Your API key from openweathermap.org
+- `owmLocation`: City name (e.g., "London,UK")
+- `owmUnits`: "metric" or "imperial"
+- `owmTempEnabled`: 1 = show temperature, 0 = disabled
+- `owmTempDisplayTime`: Seconds to display temperature (default: 5)
 
-No changes in "config.h" are needed to get it up and running the first time.
+#### LED Hardware
+- `LED_PIN`: GPIO pin for LED data (default: 4)
+- `ledBrightness`: Overall brightness (0-255, default: 128)
 
-If you want to show the temperature of a location as well, enable it by setting the variable "owmTempEnabled" to 1. You also have to set and set the API key, which you can get for free from [Open Weather Map](https://openweathermap.org/price), and your location ([city](https://openweathermap.org/current#name)).
+### Advanced Settings
+- `HTTP_PORT`: Config portal port (default: 80)
+- `NUM_WIFI_CREDENTIALS`: Number of WiFi networks to store (default: 2)
+- `DRD_TIMEOUT`: Double reset timeout in seconds (default: 10)
+- `owmTempMin/Max`: Temperature range for color gradient (-40 to 50°C)
+- `owmTempSchedule`: When to show temp (default: "30 * * * * *" = :30 past each minute)
+- `clockUpdateSchedule`: Clock update rate (default: "* * * * * *" = every second)
+- `owmUpdateSchedule`: Weather update rate (default: "0 5 * * * *" = 5 min past hour)
 
-Now compile and upload it to the ESP.
+### Expert Settings
+- `FORMAT_FILESYSTEM`: Format LittleFS on boot (default: false)
+- `WIFI_RESET_SETTINGS`: Reset all WiFi settings (default: false, debug only)
+- `DEBUG`: Uncomment to enable serial debug output
+- `_ESPASYNC_WIFIMGR_LOGLEVEL_`: WiFi manager log level (0-4)
+- `_ASYNC_HTTP_LOGLEVEL_`: HTTP request log level (0-4)
 
-### WiFi
+## Character Set
 
-When starting up the clock the first time, it should show "ConF". This indicates that the configuration portal of the WiFiMaanger is active. Connect a device to the access point called "LED-Clock-Config" (default password is "ledclock") and configure your WiFi.
+The 7-segment display supports:
+- **Digits**: 0-9
+- **Hex**: A-F
+- **Letters**: H, L, N, O, P, R, S, U (upper and lowercase variants)
+- **Symbols**: ° (degree), - (minus)
+- **Status Words**: "Load", "ConF", "Conn", "Er##" (error codes)
 
-Once it's configured, you can start the configuration portal manually by resetting the ESP32 two times within few seconds. This can either be done by pressing the reset button on the ESP board twice or simply by plugging it out and in two times.
+## Task Schedule
 
-Connecting to the WiFi can take up to 40s, so be patient ;-)
+| Task | Interval | Description |
+|------|----------|-------------|
+| Update Clock | Every second | Display current time with blinking colon |
+| Fetch Weather | Every hour at :05 | Get temperature from OpenWeatherMap |
+| Show Temperature | Every minute at :30 | Display temp for 5 seconds |
+
+## Troubleshooting
+
+### Display shows "Err01"
+- WiFi initialization failed
+- Check serial monitor for details
+- Try double reset to reconfigure WiFi
+
+### No temperature display
+- Check `owmTempEnabled = 1` in config.h
+- Verify API key is valid at openweathermap.org
+- Check serial monitor for API errors
+- Ensure WiFi is connected
+
+### Config portal not appearing
+- Double reset detection: Press reset twice within 10 seconds
+- First boot automatically enters config portal
+- Check LED display shows "ConF"
+
+### LEDs not lighting up
+- Verify `LED_PIN` matches your wiring (default: GPIO 4)
+- Check LED power supply (5V, sufficient current for 58 LEDs)
+- Increase brightness: `ledBrightness = 255`
+
+### Time not updating
+- NTP sync requires WiFi connection
+- Check timezone configuration in config portal
+- Serial monitor shows NTP sync status
+- First sync may take 30-60 seconds
+
+## Development
+
+### Code Style
+- Single blank line between functions/blocks
+- No trailing whitespace
+- Use `const char*` over Arduino `String` where possible
+- All config options must remain in `config.h`
+- **Never modify `_legacy/` folder**
+
+### Adding Features
+1. Keep modular architecture (separate .h/.cpp files)
+2. Use TaskScheduler for periodic tasks
+3. Add config options to both `config.h` and `config_rename.h`
+4. Update this README with new features
+5. Test WiFi resilience and error handling
+
+## License
+
+GNU General Public License v3.0
+
+Copyright (c) 2021 Urs Weiss
+
+## Links
+
+- **Prusa Printers**: https://www.prusaprinters.org/prints/68013-7-segment-led-clock
+- **GitHub**: (Add your repo URL here)
+- **PlatformIO**: https://platformio.org/
+- **FastLED**: https://github.com/FastLED/FastLED
+- **OpenWeatherMap**: https://openweathermap.org/
+
+## Credits
+
+Original Arduino sketch by Urs Weiss (2021)  
+Refactored to PlatformIO (2025)
+
+Uses libraries by:
+- Khoi Hoang (ESPAsync_WiFiManager, ESP_DoubleResetDetector)
+- Daniel Garcia (FastLED)
+- Benoit Blanchon (ArduinoJson)
+- Anatoli Arkhipenko (TaskScheduler)
