@@ -29,7 +29,11 @@ inline uint8_t          owmTempDisplayTime =        5;                          
 
 // FastLED
 inline uint8_t          ledBrightness =             128;                                // Maximum brightness (0-255)
-
+inline uint8_t          ledDimEnabled =             1;                                  // Enable automatic dimming | 0 => No, 1 => Yes
+inline uint8_t          ledDimBrightness =          64;                                 // Dimmed brightness level (0-255)
+inline uint8_t          ledDimFadeDuration =        30;                                 // How long (in seconds) the fading between states (normal <-> dimmed) should take
+inline const char*      ledDimStartTime =           "22:00";                            // Time to start dimming (HH:MM, 24-hour format)
+inline const char*      ledDimEndTime =             "06:00";                            // Time to end dimming (HH:MM, 24-hour format)
 
 /***************************/
 /**** ADVANCED SETTINGS ****/
@@ -43,7 +47,7 @@ inline String           portalSsid =                "LED-Clock-Config";         
 
 // Config portal
 #define                 HTTP_PORT                   80                                  // HTTP port to use for config portal
-#define                 NUM_WIFI_CREDENTIALS        2                                   // How many WiFi credentials should be stored (it connects to the first it finds and tries the next one if it disconnects)
+#define                 NUM_WIFI_CREDENTIALS        1                                  // How many WiFi credentials should be stored (if >1 it connects to the first it finds and tries the next one if it disconnects)
 #define                 PORTAL_SHOW_PW_ON_CONSOLE   false                               // Will show the config portal on console during boot if set to true
 
 // Open Weather Map

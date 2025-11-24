@@ -23,6 +23,7 @@
 #include <ESP32Time.h>
 #include "config.h"
 #include "Logger.h"
+#include "BrightnessControl.h"
 #include "LED_Clock.h"
 #include "WiFi_Manager.h"
 #include "Weather.h"
@@ -42,6 +43,7 @@ uint8_t lastSecond = 255;
 // Task callbacks
 void updateClockCallback() {
   uint8_t currentSecond = rtc.getSecond();
+  updateBrightness(rtc);
   if (currentSecond != lastSecond) {
     lastSecond = currentSecond;
     if (owmTempEnabled && CronHelper::shouldExecute(owmTempSchedule, rtc)) {
@@ -77,6 +79,7 @@ void setup() {
   }
   syncRTCWithNTP(rtc);
   setLoggerRTC(&rtc);
+  initBrightnessControl();
   if (owmTempEnabled) {
     fetchWeather();
   }

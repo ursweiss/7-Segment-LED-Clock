@@ -19,6 +19,7 @@
 
 #include "LED_Clock.h"
 #include "Logger.h"
+#include "BrightnessControl.h"
 #include <ESP32Time.h>
 
 // Global variables
@@ -173,12 +174,13 @@ void toggleSecondIndicator() {
 
 void secondIndicatorOn() {
   uint8_t colorCorrection = 0;
+  uint8_t currentBrightness = getCurrentMainBrightness();
   CRGB tmpColor;
   if (clockColorMode == 0) {
     tmpColor = clockColorSolid;
   } else if (clockColorMode == 1) {
     colorCorrection = 2 * clockColorCharBlend;
-    tmpColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), ledBrightness, currentBlending);
+    tmpColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), currentBrightness, currentBlending);
   }
   fill_solid(&(leds[NUM_LEDS-2]), 2, tmpColor);
 }
@@ -190,10 +192,7 @@ void secondIndicatorOff() {
 void secondIndicatorDim() {
   uint8_t colorCorrection = 0;
   CRGB tmpDarkColor;
-  darkBrightness = ledBrightness - clockSecIndicatorDiff;
-  if (darkBrightness > ledBrightness) {
-    darkBrightness = 0;
-  }
+  darkBrightness = getCurrentColonBrightness();
   if (clockColorMode == 0) {
     tmpDarkColor = clockColorSolid;
     CHSV tempColorHsv = rgb2hsv_approximate(tmpDarkColor);
@@ -258,7 +257,8 @@ void displayTime(ESP32Time& rtc) {
       colorIndex++;
     }
   }
-  currentColor = ColorFromPalette(currentPalette, colorIndex, ledBrightness, currentBlending);
+  uint8_t currentBrightness = getCurrentMainBrightness();
+  currentColor = ColorFromPalette(currentPalette, colorIndex, currentBrightness, currentBlending);
   int hourNibble10 = currentHour / 10;
   int hourNibble = currentHour % 10;
   int minNibble10 = currentMinute / 10;
