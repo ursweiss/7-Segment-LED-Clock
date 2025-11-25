@@ -57,14 +57,14 @@ void logMessage(LogLevel level, String message) {
     unsigned long uptime = millis();
     snprintf(timestamp, sizeof(timestamp), "[%lu]", uptime);
   }
-  const char* levelStr;
+  const __FlashStringHelper* levelStr;
   switch (level) {
-    case LOG_LEVEL_INFO:  levelStr = "[INFO]"; break;
-    case LOG_LEVEL_WARN:  levelStr = "[WARN]"; break;
-    case LOG_LEVEL_ERROR: levelStr = "[ERROR]"; break;
-    case LOG_LEVEL_CRIT:  levelStr = "[CRIT]"; break;
-    case LOG_LEVEL_DEBUG: levelStr = "[DEBUG]"; break;
-    default:              levelStr = "[UNKNOWN]"; break;
+    case LOG_LEVEL_INFO:  levelStr = F("[INFO]"); break;
+    case LOG_LEVEL_WARN:  levelStr = F("[WARN]"); break;
+    case LOG_LEVEL_ERROR: levelStr = F("[ERROR]"); break;
+    case LOG_LEVEL_CRIT:  levelStr = F("[CRIT]"); break;
+    case LOG_LEVEL_DEBUG: levelStr = F("[DEBUG]"); break;
+    default:              levelStr = F("[UNKNOWN]"); break;
   }
   Serial.print(timestamp);
   Serial.print(levelStr);

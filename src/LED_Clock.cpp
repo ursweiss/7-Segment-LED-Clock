@@ -42,7 +42,7 @@ extern uint32_t lastTempDisplayTime;
 // 7-segment character mapping
 // 0-9: Digits, 10-16: Hex A-F, 17-18: H/h, 19: L, 20: n, 21-22: O/o
 // 23: P, 24: r, 25: S, 26-27: U/u, 28: degree, 29: minus, 30: off
-const uint8_t ledChar[31][7] = {
+const uint8_t PROGMEM ledChar[31][7] = {
   {0,1,1,1,1,1,1}, // 0
   {0,1,0,0,0,0,1}, // 1, l, I
   {1,1,1,0,1,1,0}, // 2
@@ -220,7 +220,7 @@ void displayCharacter(uint8_t charNum, uint8_t position, bool customize, CRGBPal
         currentColor = ColorFromPalette(currentPalette, charBlendIndex, ledBrightness, currentBlending);
       }
     }
-    if (ledChar[charNum][i]) {
+    if (pgm_read_byte(&ledChar[charNum][i])) {
       fill_solid(&(leds[i*2+offset]), 2, currentColor);
     } else {
       fill_solid(&(leds[i*2+offset]), 2, CRGB::Black);

@@ -48,49 +48,4 @@ void secondIndicatorOff();
 void secondIndicatorDim();
 void toggleSecondIndicator();
 
-#endif
-
-#ifndef LED_CLOCK_H
-#define LED_CLOCK_H
-
-#include <FastLED.h>
-#include "config.h"
-
-// FastLED configuration
-#define NUM_LEDS 58
-#define LED_TYPE WS2812
-#define COLOR_ORDER GRB
-
-// LED array and display parameters
-extern CRGB leds[NUM_LEDS];
-extern const uint8_t totalCharacters;
-extern const uint8_t segmentsPerCharacter;
-extern const uint8_t ledsPerSegment;
-extern CRGBPalette16 currentPalette;
-extern TBlendType currentBlending;
-extern CRGB currentColor;
-extern CRGB currentDarkColor;
-extern uint8_t colorIndex;
-extern uint8_t charBlendIndex;
-extern uint8_t darkBrightness;
-extern bool secondIndicatorState;
-extern char displayWord[5];
-
-// 7-segment character mapping (31 characters)
-// Array maps character index to 7 segments: {a, b, c, d, e, f, g}
-// a=top, b=top-right, c=bottom-right, d=bottom, e=bottom-left, f=top-left, g=middle
-extern const uint8_t ledChar[31][7];
-
-// Function declarations
-void initLEDs();
-int mapChar(char character);
-void toggleSecondIndicator();
-void secondIndicatorOff();
-void displayCharacter(uint8_t charNum, uint8_t position, bool customize = false, CRGBPalette16 customPalette = RainbowColors_p, uint8_t customBlendIndex = 0);
-void displayClockface(String word, bool customize = false, CRGBPalette16 customPalette = RainbowColors_p, uint8_t customBlendIndex = 0);
-void displayTime();
-void displayTemperature();
-void displayStatus(uint8_t messageId);
-void displayError(uint8_t errorId);
-
 #endif // LED_CLOCK_H

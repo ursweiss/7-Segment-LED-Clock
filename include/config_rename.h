@@ -47,7 +47,7 @@ inline String           portalSsid =                "LED-Clock-Config";         
 
 // Config portal
 #define                 HTTP_PORT                   80                                  // HTTP port to use for config portal
-#define                 NUM_WIFI_CREDENTIALS        1                                  // How many WiFi credentials should be stored (if >1 it connects to the first it finds and tries the next one if it disconnects)
+#define                 NUM_WIFI_CREDENTIALS        1                                   // How many WiFi credentials should be stored (if >1 it connects to the first it finds and tries the next one if it disconnects)
 #define                 PORTAL_SHOW_PW_ON_CONSOLE   false                               // Will show the config portal on console during boot if set to true
 
 // Open Weather Map
@@ -71,7 +71,7 @@ inline const char*      owmTempSchedule =           "30 * * * * *";             
 #define                 ESP_DRD_USE_LITTLEFS        true
 #define                 ESP_DRD_USE_SPIFFS          false
 #define                 ESP_DRD_USE_EEPROM          false
-#define                 USE_AVAILABLE_PAGES         true                                // Use false if you don't like to display Available Pages in Information Page of Config Portal
+#define                 USE_AVAILABLE_PAGES         false                               // Use false if you don't like to display Available Pages in Information Page of Config Portal
 #define                 USE_ESP_WIFIMANAGER_NTP     true                                // Use false to disable NTP config (you should not disable it, if you want to see the correct time ;-)
 #define                 USE_CLOUDFLARE_NTP          false                               // Use true to enable CloudFlare NTP service. System can hang if you don't have Internet access while accessing CloudFlare
 #define                 USING_CORS_FEATURE          false                               // Default false for using only whenever necessary to avoid security issue
