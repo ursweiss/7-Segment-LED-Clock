@@ -21,11 +21,14 @@
 #include <FastLED.h>
 #include <TaskScheduler.h>
 #include <ESP32Time.h>
+#include <ESPAsyncWebServer.h>
 #include "config.h"
+#include "ConfigManager.h"
 #include "Logger.h"
 #include "BrightnessControl.h"
 #include "LED_Clock.h"
 #include "WiFi_Manager.h"
+#include "WebConfig.h"
 #include "Weather.h"
 #include "CronHelper.h"
 
@@ -35,6 +38,9 @@ Scheduler taskScheduler;
 // RTC for accurate time tracking
 ESP32Time rtc;
 
+// Web server for configuration (separate from WiFi Manager's portal server)
+AsyncWebServer configWebServer(80);
+
 // Global variables
 uint32_t lastTempDisplayTime = 0;
 bool tempDisplayActive = false;
@@ -42,21 +48,22 @@ uint8_t lastSecond = 255;
 
 // Task callbacks
 void updateClockCallback() {
+  Config& cfg = configManager.getConfig();
   uint8_t currentSecond = rtc.getSecond();
   updateBrightness(rtc);
   if (currentSecond != lastSecond) {
     lastSecond = currentSecond;
-    if (owmTempEnabled && CronHelper::shouldExecute(owmTempSchedule, rtc)) {
+    if (cfg.owmTempEnabled && CronHelper::shouldExecute(cfg.owmTempSchedule.c_str(), rtc)) {
       if (!tempDisplayActive) {
         tempDisplayActive = true;
         displayTemperature();
       }
     }
-    if (owmTempEnabled && CronHelper::shouldExecute(owmUpdateSchedule, rtc)) {
+    if (cfg.owmTempEnabled && CronHelper::shouldExecute(cfg.owmUpdateSchedule.c_str(), rtc)) {
       fetchWeather();
     }
   }
-  if (tempDisplayActive && (millis() - lastTempDisplayTime >= (owmTempDisplayTime * 1000))) {
+  if (tempDisplayActive && (millis() - lastTempDisplayTime >= (cfg.owmTempDisplayTime * 1000))) {
     tempDisplayActive = false;
   }
   if (!tempDisplayActive) {
@@ -70,6 +77,17 @@ Task taskUpdateClock(100, TASK_FOREVER, &updateClockCallback);
 void setup() {
   initLogger();
   LOG_INFO("7-Segment LED Clock Starting...");
+  
+  // Initialize configuration manager first
+  if (!configManager.begin()) {
+    LOG_ERROR("Failed to initialize configuration");
+    displayError(2);
+    delay(5000);
+    ESP.restart();
+  }
+  
+  Config& cfg = configManager.getConfig();
+  
   initLEDs();
   if (!initWiFiManager()) {
     LOG_ERROR("WiFi initialization failed");
@@ -79,8 +97,17 @@ void setup() {
   }
   syncRTCWithNTP(rtc);
   setLoggerRTC(&rtc);
+  
+  // Initialize web configuration server
+  LOG_INFO("Initializing web server...");
+  if (initWebConfig(&configWebServer)) {
+    if (startMDNS("ledclock")) {
+      configWebServer.begin();
+      LOG_INFO("Web server started on port 80");
+    }
+  }
   initBrightnessControl();
-  if (owmTempEnabled) {
+  if (cfg.owmTempEnabled) {
     fetchWeather();
   }
   taskScheduler.addTask(taskUpdateClock);
@@ -91,6 +118,14 @@ void setup() {
 void loop() {
   static unsigned long lastRTCSync = 0;
   const unsigned long RTC_SYNC_INTERVAL = 3600000;
+  
+  // Check for restart request
+  if (isRestartRequested()) {
+    LOG_WARN("Restarting device...");
+    delay(100);
+    ESP.restart();
+  }
+  
   if (millis() - lastRTCSync >= RTC_SYNC_INTERVAL) {
     if (isWiFiConnected()) {
       syncRTCWithNTP(rtc);

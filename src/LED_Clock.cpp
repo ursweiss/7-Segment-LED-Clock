@@ -20,6 +20,7 @@
 #include "LED_Clock.h"
 #include "Logger.h"
 #include "BrightnessControl.h"
+#include "ConfigManager.h"
 #include <ESP32Time.h>
 
 // Global variables
@@ -77,10 +78,11 @@ const uint8_t PROGMEM ledChar[31][7] = {
 };
 
 void initLEDs() {
+  Config& cfg = configManager.getConfig();
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-  FastLED.setBrightness(ledBrightness);
-  currentPalette = clockColorPalette;
-  currentBlending = clockColorBlending;
+  FastLED.setBrightness(cfg.ledBrightness);
+  currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
+  currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
   charBlendIndex = colorIndex;
 }
 
@@ -146,22 +148,25 @@ int mapChar(char character) {
 }
 
 void toggleSecondIndicator() {
+  Config& cfg = configManager.getConfig();
   uint8_t colorCorrection = 0;
   CRGB tmpColor;
   CRGB tmpDarkColor;
-  darkBrightness = ledBrightness - clockSecIndicatorDiff;
-  if (darkBrightness > ledBrightness) {
+  darkBrightness = cfg.ledBrightness - cfg.clockSecIndicatorDiff;
+  if (darkBrightness > cfg.ledBrightness) {
     darkBrightness = 0;
   }
-  if (clockColorMode == 0) {
-    tmpColor = clockColorSolid;
-    tmpDarkColor = clockColorSolid;
+  if (cfg.clockColorMode == 0) {
+    tmpColor = cfg.clockColorSolid;
+    tmpDarkColor = cfg.clockColorSolid;
     CHSV tempColorHsv = rgb2hsv_approximate(tmpColor);
     tempColorHsv.v = darkBrightness;
     hsv2rgb_rainbow(tempColorHsv, tmpDarkColor);
-  } else if (clockColorMode == 1) {
-    colorCorrection = 2 * clockColorCharBlend;
-    tmpColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), ledBrightness, currentBlending);
+  } else if (cfg.clockColorMode == 1) {
+    colorCorrection = 2 * cfg.clockColorCharBlend;
+    currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
+    currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
+    tmpColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), cfg.ledBrightness, currentBlending);
     tmpDarkColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), darkBrightness, currentBlending);
   }
   if (secondIndicatorState) {
@@ -173,13 +178,16 @@ void toggleSecondIndicator() {
 }
 
 void secondIndicatorOn() {
+  Config& cfg = configManager.getConfig();
   uint8_t colorCorrection = 0;
   uint8_t currentBrightness = getCurrentMainBrightness();
   CRGB tmpColor;
-  if (clockColorMode == 0) {
-    tmpColor = clockColorSolid;
-  } else if (clockColorMode == 1) {
-    colorCorrection = 2 * clockColorCharBlend;
+  if (cfg.clockColorMode == 0) {
+    tmpColor = cfg.clockColorSolid;
+  } else if (cfg.clockColorMode == 1) {
+    colorCorrection = 2 * cfg.clockColorCharBlend;
+    currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
+    currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
     tmpColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), currentBrightness, currentBlending);
   }
   fill_solid(&(leds[NUM_LEDS-2]), 2, tmpColor);
@@ -190,34 +198,40 @@ void secondIndicatorOff() {
 }
 
 void secondIndicatorDim() {
+  Config& cfg = configManager.getConfig();
   uint8_t colorCorrection = 0;
   CRGB tmpDarkColor;
   darkBrightness = getCurrentColonBrightness();
-  if (clockColorMode == 0) {
-    tmpDarkColor = clockColorSolid;
+  if (cfg.clockColorMode == 0) {
+    tmpDarkColor = cfg.clockColorSolid;
     CHSV tempColorHsv = rgb2hsv_approximate(tmpDarkColor);
     tempColorHsv.v = darkBrightness;
     hsv2rgb_rainbow(tempColorHsv, tmpDarkColor);
-  } else if (clockColorMode == 1) {
-    colorCorrection = 2 * clockColorCharBlend;
+  } else if (cfg.clockColorMode == 1) {
+    colorCorrection = 2 * cfg.clockColorCharBlend;
+    currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
+    currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
     tmpDarkColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), darkBrightness, currentBlending);
   }
   fill_solid(&(leds[NUM_LEDS-2]), 2, tmpDarkColor);
 }
 
 void displayCharacter(uint8_t charNum, uint8_t position, bool customize, CRGBPalette16 customPalette, uint8_t customBlendIndex) {
+  Config& cfg = configManager.getConfig();
   if (charNum > 30) {
     return;
   }
   uint8_t offset = position * segmentsPerCharacter * ledsPerSegment;
   for (int i = 0; i < segmentsPerCharacter; i++) {
     if (customize) {
-      currentColor = ColorFromPalette(customPalette, customBlendIndex, ledBrightness, currentBlending);
+      currentColor = ColorFromPalette(customPalette, customBlendIndex, cfg.ledBrightness, currentBlending);
     } else {
-      if (clockColorMode == 0) {
-        currentColor = clockColorSolid;
-      } else if (clockColorMode == 1) {
-        currentColor = ColorFromPalette(currentPalette, charBlendIndex, ledBrightness, currentBlending);
+      if (cfg.clockColorMode == 0) {
+        currentColor = cfg.clockColorSolid;
+      } else if (cfg.clockColorMode == 1) {
+        currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
+        currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
+        currentColor = ColorFromPalette(currentPalette, charBlendIndex, cfg.ledBrightness, currentBlending);
       }
     }
     if (pgm_read_byte(&ledChar[charNum][i])) {
@@ -238,7 +252,8 @@ void displayClockface(String word, bool customize, CRGBPalette16 customPalette, 
     } else {
       singleChar = word.charAt(i - leadingBlanks);
       charNum = isDigit(singleChar) ? (uint8_t)singleChar - 48 : mapChar(singleChar);
-      charBlendIndex += clockColorCharBlend;
+      Config& cfg = configManager.getConfig();
+      charBlendIndex += cfg.clockColorCharBlend;
     }
     displayCharacter(charNum, i, customize, customPalette, customBlendIndex);
   }
@@ -253,7 +268,8 @@ void displayTime(ESP32Time& rtc) {
   if (currentSecond != lastDisplaySecond) {
     lastDisplaySecond = currentSecond;
     secondIndicatorState = !secondIndicatorState;
-    if (clockColorMode == 1) {
+    Config& cfg = configManager.getConfig();
+    if (cfg.clockColorMode == 1) {
       colorIndex++;
     }
   }
