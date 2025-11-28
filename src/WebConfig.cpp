@@ -27,7 +27,7 @@ bool initWebConfig(AsyncWebServer* server) {
   
   // Test route
   server->on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send_P(200, "text/html", INDEX_HTML);
+    request->send(200, "text/html", INDEX_HTML);
   });
   
   // Get current configuration
@@ -41,6 +41,7 @@ bool initWebConfig(AsyncWebServer* server) {
     doc["clockColorSolid"] = (uint32_t)cfg.clockColorSolid;
     doc["clockColorPaletteIndex"] = cfg.clockColorPaletteIndex;
     doc["clockColorCharBlend"] = cfg.clockColorCharBlend;
+    doc["clockColorBlending"] = cfg.clockColorBlending;
     doc["clockSecIndicatorDiff"] = cfg.clockSecIndicatorDiff;
     doc["owmApiServer"] = cfg.owmApiServer;
     doc["owmApiKey"] = cfg.owmApiKey;
@@ -48,12 +49,17 @@ bool initWebConfig(AsyncWebServer* server) {
     doc["owmUnits"] = cfg.owmUnits;
     doc["owmTempEnabled"] = cfg.owmTempEnabled;
     doc["owmTempDisplayTime"] = cfg.owmTempDisplayTime;
+    doc["owmTempMin"] = cfg.owmTempMin;
+    doc["owmTempMax"] = cfg.owmTempMax;
+    doc["owmTempSchedule"] = cfg.owmTempSchedule;
+    doc["owmUpdateSchedule"] = cfg.owmUpdateSchedule;
     doc["ledBrightness"] = cfg.ledBrightness;
     doc["ledDimEnabled"] = cfg.ledDimEnabled;
     doc["ledDimBrightness"] = cfg.ledDimBrightness;
     doc["ledDimFadeDuration"] = cfg.ledDimFadeDuration;
     doc["ledDimStartTime"] = cfg.ledDimStartTime;
     doc["ledDimEndTime"] = cfg.ledDimEndTime;
+    doc["clockUpdateSchedule"] = cfg.clockUpdateSchedule;
     
     String response;
     serializeJson(doc, response);
@@ -87,6 +93,7 @@ bool initWebConfig(AsyncWebServer* server) {
       if (doc.containsKey("clockColorSolid")) cfg.clockColorSolid = doc["clockColorSolid"].as<uint32_t>();
       if (doc.containsKey("clockColorPaletteIndex")) cfg.clockColorPaletteIndex = doc["clockColorPaletteIndex"];
       if (doc.containsKey("clockColorCharBlend")) cfg.clockColorCharBlend = doc["clockColorCharBlend"];
+      if (doc.containsKey("clockColorBlending")) cfg.clockColorBlending = doc["clockColorBlending"];
       if (doc.containsKey("clockSecIndicatorDiff")) cfg.clockSecIndicatorDiff = doc["clockSecIndicatorDiff"];
       if (doc.containsKey("owmApiServer")) cfg.owmApiServer = doc["owmApiServer"].as<String>();
       if (doc.containsKey("owmApiKey")) cfg.owmApiKey = doc["owmApiKey"].as<String>();
@@ -94,12 +101,17 @@ bool initWebConfig(AsyncWebServer* server) {
       if (doc.containsKey("owmUnits")) cfg.owmUnits = doc["owmUnits"].as<String>();
       if (doc.containsKey("owmTempEnabled")) cfg.owmTempEnabled = doc["owmTempEnabled"];
       if (doc.containsKey("owmTempDisplayTime")) cfg.owmTempDisplayTime = doc["owmTempDisplayTime"];
+      if (doc.containsKey("owmTempMin")) cfg.owmTempMin = doc["owmTempMin"];
+      if (doc.containsKey("owmTempMax")) cfg.owmTempMax = doc["owmTempMax"];
+      if (doc.containsKey("owmTempSchedule")) cfg.owmTempSchedule = doc["owmTempSchedule"].as<String>();
+      if (doc.containsKey("owmUpdateSchedule")) cfg.owmUpdateSchedule = doc["owmUpdateSchedule"].as<String>();
       if (doc.containsKey("ledBrightness")) cfg.ledBrightness = doc["ledBrightness"];
       if (doc.containsKey("ledDimEnabled")) cfg.ledDimEnabled = doc["ledDimEnabled"];
       if (doc.containsKey("ledDimBrightness")) cfg.ledDimBrightness = doc["ledDimBrightness"];
       if (doc.containsKey("ledDimFadeDuration")) cfg.ledDimFadeDuration = doc["ledDimFadeDuration"];
       if (doc.containsKey("ledDimStartTime")) cfg.ledDimStartTime = doc["ledDimStartTime"].as<String>();
       if (doc.containsKey("ledDimEndTime")) cfg.ledDimEndTime = doc["ledDimEndTime"].as<String>();
+      if (doc.containsKey("clockUpdateSchedule")) cfg.clockUpdateSchedule = doc["clockUpdateSchedule"].as<String>();
       
       // Save to LittleFS
       if (configManager.saveConfig()) {

@@ -1,6 +1,7 @@
 #include "ConfigManager.h"
 #include "config.h"
 #include "Logger.h"
+#include "schema.h"
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 
@@ -204,55 +205,7 @@ Config& ConfigManager::getConfig() {
 }
 
 String ConfigManager::getSchema() {
-  // Schema embedded in PROGMEM - generated from schema definition
-  // This is a minimal schema for now, will be expanded with full UI metadata
-  return R"({
-    "groups": [
-      {
-        "id": "wifi",
-        "label": "WiFi Settings",
-        "fields": [
-          {"id": "portalSsid", "type": "text", "label": "Config Portal SSID", "default": "LED-Clock-Config"},
-          {"id": "portalPassword", "type": "password", "label": "Config Portal Password", "default": "ledclock"}
-        ]
-      },
-      {
-        "id": "clock",
-        "label": "Clock Display",
-        "fields": [
-          {"id": "clockColorMode", "type": "select", "label": "Color Mode", "default": 1, "options": [{"value": 0, "label": "Solid"}, {"value": 1, "label": "Palette"}]},
-          {"id": "clockColorSolid", "type": "color", "label": "Solid Color", "default": "#00FF00"},
-          {"id": "clockColorPaletteIndex", "type": "select", "label": "Palette", "default": 0, "options": [{"value": 0, "label": "Rainbow"}, {"value": 1, "label": "Cloud"}, {"value": 2, "label": "Lava"}, {"value": 3, "label": "Ocean"}, {"value": 4, "label": "Forest"}]},
-          {"id": "clockColorCharBlend", "type": "number", "label": "Char Blend", "default": 5},
-          {"id": "clockSecIndicatorDiff", "type": "number", "label": "Second Indicator Dim", "default": 32}
-        ]
-      },
-      {
-        "id": "weather",
-        "label": "Weather",
-        "fields": [
-          {"id": "owmApiServer", "type": "text", "label": "API Server", "default": "api.openweathermap.org"},
-          {"id": "owmApiKey", "type": "password", "label": "API Key", "default": ""},
-          {"id": "owmLocation", "type": "text", "label": "Location", "default": ""},
-          {"id": "owmUnits", "type": "select", "label": "Units", "default": "metric", "options": [{"value": "metric", "label": "°C"}, {"value": "imperial", "label": "°F"}]},
-          {"id": "owmTempEnabled", "type": "checkbox", "label": "Show Temperature", "default": 1},
-          {"id": "owmTempDisplayTime", "type": "number", "label": "Display Seconds", "default": 5}
-        ]
-      },
-      {
-        "id": "led",
-        "label": "LED Brightness",
-        "fields": [
-          {"id": "ledBrightness", "type": "number", "label": "Max Brightness", "default": 128},
-          {"id": "ledDimEnabled", "type": "checkbox", "label": "Auto Dimming", "default": 1},
-          {"id": "ledDimBrightness", "type": "number", "label": "Dimmed Brightness", "default": 64},
-          {"id": "ledDimFadeDuration", "type": "number", "label": "Fade Seconds", "default": 30},
-          {"id": "ledDimStartTime", "type": "time", "label": "Dim Start", "default": "22:00"},
-          {"id": "ledDimEndTime", "type": "time", "label": "Dim End", "default": "06:00"}
-        ]
-      }
-    ]
-  })";
+  return String(FPSTR(SCHEMA_JSON));
 }
 
 CRGBPalette16 ConfigManager::getPaletteByIndex(uint8_t index) {
