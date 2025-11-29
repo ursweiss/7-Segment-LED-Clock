@@ -87,7 +87,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
         </div>
     </div>
     <script>
-        const TAB_ORDER = ['clock', 'led', 'weather', 'advanced', 'wifi'];
+        const TAB_ORDER = ['clock', 'led', 'weather', 'advanced', 'wifi', 'update'];
         let schema = {};
         let config = {};
         let originalConfig = {};
@@ -95,6 +95,8 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
         let requiresRestart = false;
         let tabStates = {};
         let fieldToTab = {};
+        let currentVersion = '';
+
         
         function showMessage(text, type) {
             const msg = document.getElementById('message');
@@ -211,7 +213,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 });
             });
             
-            const submitBtn = document.querySelector('.btn-primary');
+            const submitBtn = document.querySelector('.footer .btn-primary');
             submitBtn.textContent = requiresRestart ? 'Save Configuration & Restart' : 'Save Configuration';
         }
         
@@ -496,9 +498,12 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 panelsContainer.appendChild(panel);
             });
             
+            // Add Update tab (not part of schema)
+            renderUpdateTab(menuContainer, panelsContainer);
+            
             // Restore active tab from localStorage
             const savedTab = localStorage.getItem('activeTab');
-            if (savedTab && schema.groups.find(g => g.id === savedTab)) {
+            if (savedTab && (schema.groups.find(g => g.id === savedTab) || savedTab === 'update')) {
                 showTab(savedTab);
             }
             
@@ -507,6 +512,202 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
             
             // Validate all fields on initial load
             validateAllFields();
+        }
+        
+        function renderUpdateTab(menuContainer, panelsContainer) {
+            // Add menu item
+            const menuItem = document.createElement('li');
+            const menuLink = document.createElement('a');
+            menuLink.href = '#';
+            menuLink.textContent = 'Update';
+            menuLink.setAttribute('data-tab', 'update');
+            menuLink.onclick = (e) => {
+                e.preventDefault();
+                showTab('update');
+            };
+            menuItem.appendChild(menuLink);
+            menuContainer.appendChild(menuItem);
+            
+            // Initialize tab state
+            tabStates['update'] = { hasChanges: false, hasErrors: false, errorCount: 0, changeCount: 0 };
+            
+            // Create tab panel
+            const panel = document.createElement('div');
+            panel.className = 'tab-panel';
+            panel.id = 'tab-update';
+            
+            const title = document.createElement('div');
+            title.className = 'group-title';
+            title.textContent = 'Firmware Update';
+            panel.appendChild(title);
+            
+            // Current version display
+            const versionDiv = document.createElement('div');
+            versionDiv.style.marginBottom = '20px';
+            versionDiv.innerHTML = '<strong>Current Version:</strong> <span id=\"currentVersion\">Loading...</span>';
+            panel.appendChild(versionDiv);
+            
+            // Instructions
+            const instructions = document.createElement('div');
+            instructions.style.marginBottom = '25px';
+            instructions.style.padding = '15px';
+            instructions.style.background = '#f8f9fa';
+            instructions.style.borderRadius = '4px';
+            instructions.innerHTML = `
+                <h3 style=\"margin-bottom: 10px; font-size: 16px;\">Update Instructions</h3>
+                <ol style=\"margin-left: 20px; line-height: 1.8;\">
+                    <li>Download the latest firmware from <a href=\"https://github.com/ursweiss/7-Segment-LED-Clock/releases\" target=\"_blank\" style=\"color: #3498db;\">GitHub Releases</a></li>
+                    <li>Firmware files are named: <code style=\"background: white; padding: 2px 6px; border-radius: 3px;\">LedClock_YYYY-MM-DD_HHmm.bin</code></li>
+                    <li>Select the firmware file below and click Upload</li>
+                    <li><strong>Important:</strong> Do not disconnect power or close browser during update</li>
+                </ol>
+            `;
+            panel.appendChild(instructions);
+            
+            // File upload form
+            const uploadForm = document.createElement('div');
+            uploadForm.style.marginBottom = '20px';
+            uploadForm.innerHTML = `
+                <div class=\"field\">
+                    <label>Select Firmware File (.bin)</label>
+                    <input type=\"file\" id=\"firmwareFile\" accept=\".bin\" style=\"margin-bottom: 10px;\">
+                    <div id=\"fileInfo\" style=\"font-size: 13px; color: #7f8c8d; margin-top: 5px;\"></div>
+                </div>
+                <button type=\"button\" id=\"uploadBtn\" class=\"btn btn-primary\" disabled onclick=\"uploadFirmware()\">Update Firmware</button>
+            `;
+            panel.appendChild(uploadForm);
+            
+            // Progress bar (hidden initially)
+            const progressDiv = document.createElement('div');
+            progressDiv.id = 'uploadProgress';
+            progressDiv.style.display = 'none';
+            progressDiv.style.marginTop = '20px';
+            progressDiv.innerHTML = `
+                <div style=\"margin-bottom: 10px;\"><strong id=\"uploadStatus\">Uploading...</strong></div>
+                <div style=\"background: #e0e0e0; border-radius: 4px; overflow: hidden; height: 30px;\">
+                    <div id=\"progressBar\" style=\"background: #3498db; height: 100%; width: 0%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;\">
+                        <span id=\"progressText\">0%</span>
+                    </div>
+                </div>
+            `;
+            panel.appendChild(progressDiv);
+            
+            panelsContainer.appendChild(panel);
+            
+            // File input change handler
+            setTimeout(() => {
+                const fileInput = document.getElementById('firmwareFile');
+                const uploadBtn = document.getElementById('uploadBtn');
+                const fileInfo = document.getElementById('fileInfo');
+                
+                fileInput.addEventListener('change', function() {
+                    if (this.files.length > 0) {
+                        const file = this.files[0];
+                        const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                        fileInfo.textContent = `Selected: ${file.name} (${sizeMB} MB)`;
+                        uploadBtn.disabled = false;
+                    } else {
+                        fileInfo.textContent = '';
+                        uploadBtn.disabled = true;
+                    }
+                });
+                
+                // Load current version
+                fetch('/api/version')
+                    .then(r => r.json())
+                    .then(data => {
+                        currentVersion = data.version;
+                        document.getElementById('currentVersion').textContent = currentVersion;
+                    })
+                    .catch(() => {
+                        document.getElementById('currentVersion').textContent = 'Unknown';
+                    });
+            }, 100);
+        }
+        
+        async function uploadFirmware() {
+            const fileInput = document.getElementById('firmwareFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a firmware file');
+                return;
+            }
+            
+            if (!file.name.endsWith('.bin')) {
+                alert('Invalid file type. Please select a .bin file');
+                return;
+            }
+            
+            if (file.size > 5 * 1024 * 1024) {
+                alert('File too large. Maximum size is 5 MB');
+                return;
+            }
+            
+            if (!confirm(`Upload firmware: ${file.name}?\n\nEnsure stable power supply. Do not interrupt the update process.`)) {
+                return;
+            }
+            
+            const uploadBtn = document.getElementById('uploadBtn');
+            const progressDiv = document.getElementById('uploadProgress');
+            const uploadStatus = document.getElementById('uploadStatus');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            
+            // Disable upload button and show progress
+            uploadBtn.disabled = true;
+            fileInput.disabled = true;
+            progressDiv.style.display = 'block';
+            uploadStatus.textContent = 'Uploading firmware...';
+            
+            const formData = new FormData();
+            formData.append('firmware', file);
+            
+            const xhr = new XMLHttpRequest();
+            
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    progressBar.style.width = percent + '%';
+                    progressText.textContent = percent + '%';
+                }
+            });
+            
+            xhr.addEventListener('load', () => {
+                if (xhr.status === 200) {
+                    progressBar.style.background = '#27ae60';
+                    uploadStatus.textContent = 'Update successful! Device will restart in 5 seconds...';
+                    progressBar.style.width = '100%';
+                    progressText.textContent = '100%';
+                    
+                    let countdown = 5;
+                    const countdownInterval = setInterval(() => {
+                        countdown--;
+                        if (countdown > 0) {
+                            uploadStatus.textContent = `Update successful! Device will restart in ${countdown} seconds...`;
+                        } else {
+                            clearInterval(countdownInterval);
+                            uploadStatus.textContent = 'Restarting device...';
+                            setTimeout(() => location.reload(), 3000);
+                        }
+                    }, 1000);
+                } else {
+                    progressBar.style.background = '#e74c3c';
+                    uploadStatus.textContent = 'Update failed. Please try again.';
+                    uploadBtn.disabled = false;
+                    fileInput.disabled = false;
+                }
+            });
+            
+            xhr.addEventListener('error', () => {
+                progressBar.style.background = '#e74c3c';
+                uploadStatus.textContent = 'Upload error. Please check connection and try again.';
+                uploadBtn.disabled = false;
+                fileInput.disabled = false;
+            });
+            
+            xhr.open('POST', '/api/update');
+            xhr.send(formData);
         }
         
         async function saveConfig() {

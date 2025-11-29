@@ -2,8 +2,10 @@
 #include "ConfigManager.h"
 #include "Logger.h"
 #include "web_html.h"
+#include "version.h"
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
+#include <Update.h>
 
 static bool restartRequested = false;
 static unsigned long restartRequestTime = 0;
@@ -72,6 +74,20 @@ bool initWebConfig(AsyncWebServer* server) {
     request->send(200, "application/json", schema);
   });
   
+  // Get version info
+  server->on("/api/version", HTTP_GET, [](AsyncWebServerRequest *request) {
+    StaticJsonDocument<256> doc;
+    doc["version"] = getBuildVersion();
+    doc["chipModel"] = ESP.getChipModel();
+    doc["chipCores"] = ESP.getChipCores();
+    doc["flashSize"] = ESP.getFlashChipSize();
+    doc["freeHeap"] = ESP.getFreeHeap();
+    
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+  });
+  
   // Update configuration
   server->on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
     [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
@@ -130,6 +146,49 @@ bool initWebConfig(AsyncWebServer* server) {
     restartRequestTime = millis();
     request->send(200, "application/json", "{\"success\":true,\"message\":\"Device will restart in 2 seconds\"}");
   });
+  
+  // OTA Update endpoint
+  server->on("/api/update", HTTP_POST,
+    [](AsyncWebServerRequest *request) {
+      // This is the response handler after upload completes
+      bool success = !Update.hasError();
+      if (success) {
+        LOG_INFO("OTA Update successful");
+        request->send(200, "application/json", "{\"success\":true,\"message\":\"Update complete. Restarting...\"}");
+        restartRequested = true;
+        restartRequestTime = millis();
+      } else {
+        LOG_ERROR("OTA Update failed");
+        request->send(500, "application/json", "{\"success\":false,\"message\":\"Update failed\"}");
+      }
+    },
+    [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+      // This is the upload handler
+      if (!index) {
+        LOG_INFOF("OTA Update started: %s", filename.c_str());
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+          LOG_ERROR("Failed to begin OTA update");
+          Update.printError(Serial);
+        }
+      }
+      
+      if (len) {
+        if (Update.write(data, len) != len) {
+          LOG_ERROR("Failed to write OTA data");
+          Update.printError(Serial);
+        }
+      }
+      
+      if (final) {
+        if (Update.end(true)) {
+          LOG_INFOF("OTA Update finished: %u bytes", index + len);
+        } else {
+          LOG_ERROR("OTA Update end failed");
+          Update.printError(Serial);
+        }
+      }
+    }
+  );
   
   LOG_INFO("Web config routes initialized");
   return true;
