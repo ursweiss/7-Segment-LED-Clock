@@ -35,6 +35,7 @@ extern TBlendType currentBlending;
 extern CRGB currentColor;
 extern uint8_t colorIndex;
 
+void updatePaletteFromConfig();
 void initLEDs();
 int mapChar(char character);
 void displayCharacter(uint8_t charNum, uint8_t position, bool customize = false, CRGBPalette16 customPalette = RainbowColors_p, uint8_t customBlendIndex = 0);

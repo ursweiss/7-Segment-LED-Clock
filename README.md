@@ -13,14 +13,29 @@ This project has been successfully refactored from Arduino IDE to PlatformIO wit
 ├── include/
 │   ├── config.h                    # Your configuration (gitignored)
 │   ├── config_rename.h             # Configuration template
+│   ├── BrightnessControl.h         # Auto-dimming system
+│   ├── ConfigManager.h             # Configuration persistence (LittleFS)
+│   ├── ConfigStorage.h             # WiFi credentials storage
+│   ├── CronHelper.h                # Cron expression parsing
 │   ├── LED_Clock.h                 # LED display and character mapping
-│   ├── WiFi_Manager.h              # WiFi and NTP configuration
-│   └── Weather.h                   # OpenWeatherMap API integration
+│   ├── Logger.h                    # Unified logging system
+│   ├── schema.h                    # Web UI schema (embedded)
+│   ├── version.h                   # Build version tracking
+│   ├── Weather.h                   # OpenWeatherMap API integration
+│   ├── WebConfig.h                 # Web configuration server
+│   └── WiFi_Manager.h              # WiFi and NTP configuration
 ├── src/
 │   ├── main.cpp                    # Main program with TaskScheduler
+│   ├── BrightnessControl.cpp       # Auto-dimming implementation
+│   ├── ConfigManager.cpp           # Configuration management
+│   ├── ConfigStorage.cpp           # WiFi credentials handling
+│   ├── CronHelper.cpp              # Cron utilities
 │   ├── LED_Clock.cpp               # LED display implementation
-│   ├── WiFi_Manager.cpp            # WiFi/NTP implementation
-│   └── Weather.cpp                 # Weather API implementation
+│   ├── Logger.cpp                  # Logging implementation
+│   ├── Weather.cpp                 # Weather API implementation (HTTPS)
+│   ├── WebConfig.cpp               # Web server and API endpoints
+│   ├── web_html.h                  # Web UI HTML/CSS/JS (embedded)
+│   └── WiFi_Manager.cpp            # WiFi/NTP implementation
 ├── .gitignore
 └── platformio.ini                  # PlatformIO configuration
 ```
@@ -44,14 +59,24 @@ This project has been successfully refactored from Arduino IDE to PlatformIO wit
   - SOLID: Single color (e.g., Green, Blue, Red)
   - PALETTE: Rainbow/animated color palettes with per-character blending
 - **Second Indicator**: Blinking colon LEDs with configurable dimming
-- **OpenWeatherMap Integration**: Fetches temperature every hour
+- **OpenWeatherMap Integration**: Fetches temperature every hour via secure HTTPS connection
 - **Temperature Display**: Shows temp for 5 seconds at :30 past each minute
 - **Task Scheduling**: Replaced CronAlarms with TaskScheduler for reliability
+- **Web Configuration Interface**: Runtime configuration via web browser at http://ledclock.local
+  - Live configuration editing with real-time validation
+  - API key masking for security
+  - OTA firmware updates via web interface
+  - Persistent storage with LittleFS
+  - RESTful API for programmatic control
+- **Auto-Brightness Dimming**: Automatic brightness reduction during night hours with smooth fade transitions
+  - Configurable dim period (start/end times)
+  - Smooth brightness fading with adjustable duration
+  - Independent colon brightness control
 
 ### 🔮 Future Enhancements
-- OTA (Over-The-Air) updates (code structure prepared)
-- Web interface for runtime configuration
 - Additional display modes and animations
+- Weather forecast display
+- Multi-timezone support
 
 ## Setup Instructions
 
@@ -77,6 +102,8 @@ This project has been successfully refactored from Arduino IDE to PlatformIO wit
    uint8_t clockColorMode = 1;
    ```
 
+**Note:** Settings in `config.h` are initial defaults. Once configured via the web interface, settings are stored in LittleFS and persist across reboots. Web interface settings take precedence over `config.h`.
+
 ### 3. Build and Upload
 ```bash
 # Build the project
@@ -101,19 +128,38 @@ platformio device monitor
 - Press reset button twice within 10 seconds
 - Config portal reopens for reconfiguration
 
+### 6. Web Configuration Access
+
+After WiFi is configured, you can access the web interface for runtime configuration:
+
+1. **Via mDNS** (recommended): http://ledclock.local
+2. **Via IP address**: Check your router or serial monitor for the device's IP
+
+The web interface provides:
+- Real-time configuration editing with validation
+- All settings from `config.h` can be modified
+- Firmware updates (OTA) without USB connection
+- Device restart capability
+- Configuration changes are saved to flash memory
+- API key values are masked for security
+
+**Note:** Some settings require a device restart to take effect (indicated in the web UI).
+
 ## Libraries Used
 
 All libraries are automatically managed by PlatformIO:
 
 | Library | Version | Purpose |
-|---------|---------|---------|
+|---------|---------|------|
 | FastLED | ^3.6.0 | WS2812 RGB LED control |
-| ArduinoJson | ^6.21.4 | JSON parsing for weather API |
+| ArduinoJson | ^6.21.4 | JSON parsing for weather API and config |
 | TaskScheduler | ^3.7.0 | Periodic task execution |
 | ESP_DoubleResetDetector | ^1.3.2 | Double reset detection |
 | AsyncTCP | ^1.1.1 | Async TCP for ESP32 |
 | ESPAsyncWebServer | latest | Async web server (from GitHub) |
+| ESPAsyncDNSServer | latest | Async DNS server for captive portal |
 | ESPAsync_WiFiManager | ^1.15.1 | WiFi configuration portal |
+| ESP32Time | ^2.0.6 | RTC (Real-Time Clock) management |
 
 ## Configuration Reference
 
@@ -126,7 +172,7 @@ All libraries are automatically managed by PlatformIO:
 #### Clock Display
 - `clockColorMode`: 0 = SOLID, 1 = PALETTE
 - `clockColorSolid`: Color for SOLID mode (e.g., `CRGB::Green`)
-- `clockColorPalette`: Palette for PALETTE mode (RainbowColors_p, CloudColors_p, etc.)
+- `clockColorPaletteIndex`: Palette for PALETTE mode (0=Rainbow, 1=Cloud, 2=Lava, 3=Ocean, 4=Forest)
 - `clockColorCharBlend`: Per-character color offset (0-255)
 - `clockColorBlending`: LINEARBLEND or NOBLEND
 - `clockSecIndicatorDiff`: Second indicator dimming (0-255, 0=disabled)
@@ -142,6 +188,13 @@ All libraries are automatically managed by PlatformIO:
 #### LED Hardware
 - `LED_PIN`: GPIO pin for LED data (default: 4)
 - `ledBrightness`: Overall brightness (0-255, default: 128)
+
+#### Brightness Control
+- `ledDimEnabled`: Enable automatic dimming (0=disabled, 1=enabled, default: 1)
+- `ledDimBrightness`: Brightness level during dim period (0-255, default: 64)
+- `ledDimStartTime`: When to start dimming (format: "HH:MM", default: "22:00")
+- `ledDimEndTime`: When to end dimming (format: "HH:MM", default: "06:00")
+- `ledDimFadeDuration`: Fade transition time in seconds (default: 30)
 
 ### Advanced Settings
 - `HTTP_PORT`: Config portal port (default: 80)
@@ -159,6 +212,52 @@ All libraries are automatically managed by PlatformIO:
 - `_ESPASYNC_WIFIMGR_LOGLEVEL_`: WiFi manager log level (0-4)
 - `_ASYNC_HTTP_LOGLEVEL_`: HTTP request log level (0-4)
 
+## Web API Endpoints
+
+The device exposes a RESTful API for configuration and management:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Web configuration interface (HTML) |
+| `/api/config` | GET | Get current configuration (JSON) |
+| `/api/config` | POST | Update configuration (JSON body) |
+| `/api/schema` | GET | Get configuration schema for web UI |
+| `/api/version` | GET | Get firmware version and device info |
+| `/api/restart` | POST | Restart the device |
+| `/api/update` | POST | Upload firmware for OTA update (multipart/form-data) |
+
+### API Examples
+
+**Get Current Configuration:**
+```bash
+curl http://ledclock.local/api/config
+```
+
+**Update Configuration:**
+```bash
+curl -X POST http://ledclock.local/api/config \
+  -H "Content-Type: application/json" \
+  -d '{"ledBrightness":200,"clockColorMode":1}'
+```
+
+**Get Device Information:**
+```bash
+curl http://ledclock.local/api/version
+```
+
+**Restart Device:**
+```bash
+curl -X POST http://ledclock.local/api/restart
+```
+
+**OTA Firmware Update:**
+```bash
+curl -X POST http://ledclock.local/api/update \
+  -F "firmware=@.pio/build/esp32dev/firmware.bin"
+```
+
+**Note:** API key values are masked in GET responses for security (e.g., `owmApiKey` shows as `***...***`).
+
 ## Character Set
 
 The 7-segment display supports:
@@ -173,8 +272,9 @@ The 7-segment display supports:
 | Task | Interval | Description |
 |------|----------|-------------|
 | Update Clock | Every second | Display current time with blinking colon |
-| Fetch Weather | Every hour at :05 | Get temperature from OpenWeatherMap |
-| Show Temperature | Every minute at :30 | Display temp for 5 seconds |
+| Brightness Control | Every second | Calculate and apply brightness (dimming/fading) |
+| Fetch Weather | Every hour at :05 | Get temperature from OpenWeatherMap via HTTPS |
+| Show Temperature | Every minute at :30 | Display temp for 5 seconds with color gradient |
 
 ## Troubleshooting
 
@@ -184,10 +284,19 @@ The 7-segment display supports:
 - Try double reset to reconfigure WiFi
 
 ### No temperature display
-- Check `owmTempEnabled = 1` in config.h
+- Check `owmTempEnabled = 1` in config.h or web interface
 - Verify API key is valid at openweathermap.org
-- Check serial monitor for API errors
+- Check serial monitor for API errors (HTTPS connection issues)
 - Ensure WiFi is connected
+- Verify ESP32 has sufficient free heap memory for HTTPS/TLS connections
+- Weather updates occur at :05 past each hour (check timing)
+
+### Web interface not accessible
+- Verify device is connected to WiFi (check serial monitor)
+- Try both http://ledclock.local and the IP address
+- Check if mDNS is supported on your network (some corporate networks block it)
+- Ensure device and your computer are on the same network
+- Check that port 80 is not blocked by firewall
 
 ### Config portal not appearing
 - Double reset detection: Press reset twice within 10 seconds
@@ -211,15 +320,19 @@ The 7-segment display supports:
 - Single blank line between functions/blocks
 - No trailing whitespace
 - Use `const char*` over Arduino `String` where possible
-- All config options must remain in `config.h`
+- Use ConfigManager for all runtime settings (avoid global variables)
+- Follow logging conventions with Logger macros (LOG_INFO, LOG_ERROR, LOG_DEBUG)
+- All config options must be in both `config.h` and `config_rename.h`
 - **Never modify `_legacy/` folder**
 
 ### Adding Features
 1. Keep modular architecture (separate .h/.cpp files)
 2. Use TaskScheduler for periodic tasks
-3. Add config options to both `config.h` and `config_rename.h`
-4. Update this README with new features
-5. Test WiFi resilience and error handling
+3. Add new settings to Config struct in ConfigManager.h
+4. Update both `config.h` and `config_rename.h` with new options
+5. Update `schema.h` for web UI integration (embedded JSON schema)
+6. Update this README with new features
+7. Test WiFi resilience and error handling
 
 ## License
 
@@ -230,7 +343,7 @@ Copyright (c) 2021 Urs Weiss
 ## Links
 
 - **Prusa Printers**: https://www.prusaprinters.org/prints/68013-7-segment-led-clock
-- **GitHub**: (Add your repo URL here)
+- **GitHub**: https://github.com/ursweiss/7-Segment-LED-Clock
 - **PlatformIO**: https://platformio.org/
 - **FastLED**: https://github.com/FastLED/FastLED
 - **OpenWeatherMap**: https://openweathermap.org/
@@ -245,3 +358,4 @@ Uses libraries by:
 - Daniel Garcia (FastLED)
 - Benoit Blanchon (ArduinoJson)
 - Anatoli Arkhipenko (TaskScheduler)
+- Felix Biego (ESP32Time)

@@ -46,7 +46,7 @@ void ConfigManager::loadDefaults() {
   // Clock
   config.clockColorMode = clockColorMode;
   config.clockColorSolid = clockColorSolid;
-  config.clockColorPaletteIndex = getPaletteIndex(clockColorPalette);
+  config.clockColorPaletteIndex = 0; // Default to Rainbow
   config.clockColorCharBlend = clockColorCharBlend;
   config.clockColorBlending = (clockColorBlending == LINEARBLEND) ? 1 : 0;
   config.clockSecIndicatorDiff = clockSecIndicatorDiff;
@@ -219,9 +219,3 @@ CRGBPalette16 ConfigManager::getPaletteByIndex(uint8_t index) {
   }
 }
 
-uint8_t ConfigManager::getPaletteIndex(const CRGBPalette16& palette) {
-  // Compare with predefined palettes - this is a simple approach
-  // Note: Direct comparison doesn't work well, so we default to Rainbow
-  // In practice, the palette index should be stored separately
-  return 0;  // Default to Rainbow
-}

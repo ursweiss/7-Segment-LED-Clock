@@ -18,20 +18,8 @@ static unsigned long fadeStartMillis = 0;
 static uint8_t lastLoggedSecond = 255;
 static bool fadeCompleteLogged = false;
 
-int parseTimeToSeconds(const char* timeStr) {
-  int hours = 0, minutes = 0;
-  if (sscanf(timeStr, "%d:%d", &hours, &minutes) == 2) {
-    return hours * 3600 + minutes * 60;
-  }
-  return -1;
-}
-
-int parseTimeToMinutes(const char* timeStr) {
-  int hours = 0, minutes = 0;
-  if (sscanf(timeStr, "%d:%d", &hours, &minutes) == 2) {
-    return hours * 60 + minutes;
-  }
-  return -1;
+bool parseTime(const char* timeStr, int& hours, int& minutes) {
+  return sscanf(timeStr, "%d:%d", &hours, &minutes) == 2;
 }
 
 void initBrightnessControl() {
@@ -45,10 +33,11 @@ void initBrightnessControl() {
     return;
   }
   
-  int dimStart = parseTimeToMinutes(cfg.ledDimStartTime.c_str());
-  int dimEnd = parseTimeToMinutes(cfg.ledDimEndTime.c_str());
+  int startHours, startMinutes, endHours, endMinutes;
+  bool validStart = parseTime(cfg.ledDimStartTime.c_str(), startHours, startMinutes);
+  bool validEnd = parseTime(cfg.ledDimEndTime.c_str(), endHours, endMinutes);
   
-  if (dimStart == -1 || dimEnd == -1) {
+  if (!validStart || !validEnd) {
     LOG_ERROR("Invalid dim time format - dimming disabled");
     currentState = NORMAL;
     currentMainBrightness = cfg.ledBrightness;
@@ -57,6 +46,23 @@ void initBrightnessControl() {
   }
   
   LOG_INFOF("Brightness dimming enabled: %s-%s (fade %ds)", cfg.ledDimStartTime.c_str(), cfg.ledDimEndTime.c_str(), cfg.ledDimFadeDuration);
+}
+
+static bool isInTimePeriod(int currentSeconds, int startSeconds, int endSeconds) {
+  if (startSeconds < endSeconds) {
+    return (currentSeconds >= startSeconds && currentSeconds < endSeconds);
+  } else {
+    return (currentSeconds >= startSeconds || currentSeconds < endSeconds);
+  }
+}
+
+static uint8_t interpolateBrightness(uint8_t fromBrightness, uint8_t toBrightness, unsigned long elapsed, unsigned long duration) {
+  if (elapsed >= duration) {
+    return toBrightness;
+  }
+  float progress = (float)elapsed / (float)duration;
+  int range = toBrightness - fromBrightness;
+  return fromBrightness + (uint8_t)(range * progress);
 }
 
 void calculateBrightness(int currentSeconds, int dimStartSeconds, int dimEndSeconds, uint8_t currentSecond) {
@@ -73,31 +79,16 @@ void calculateBrightness(int currentSeconds, int dimStartSeconds, int dimEndSeco
   int fadeDownStartSeconds = dimStartSeconds - fadeDurationSeconds;
   int fadeUpEndSeconds = (dimEndSeconds + fadeDurationSeconds) % 86400;
   
-  bool inDimPeriod = false;
-  if (dimStartSeconds < dimEndSeconds) {
-    inDimPeriod = (currentSeconds >= dimStartSeconds && currentSeconds < dimEndSeconds);
-  } else {
-    inDimPeriod = (currentSeconds >= dimStartSeconds || currentSeconds < dimEndSeconds);
-  }
+  bool inDimPeriod = isInTimePeriod(currentSeconds, dimStartSeconds, dimEndSeconds);
   
-  bool inFadeDownPeriod = false;
+  // Handle fade-down period (may wrap around midnight)
   if (fadeDownStartSeconds < 0) {
     fadeDownStartSeconds += 86400;
-    inFadeDownPeriod = (currentSeconds >= fadeDownStartSeconds || currentSeconds < dimStartSeconds);
-  } else {
-    if (fadeDownStartSeconds < dimStartSeconds) {
-      inFadeDownPeriod = (currentSeconds >= fadeDownStartSeconds && currentSeconds < dimStartSeconds);
-    } else {
-      inFadeDownPeriod = (currentSeconds >= fadeDownStartSeconds || currentSeconds < dimStartSeconds);
-    }
   }
+  bool inFadeDownPeriod = isInTimePeriod(currentSeconds, fadeDownStartSeconds, dimStartSeconds);
   
-  bool inFadeUpPeriod = false;
-  if (dimEndSeconds < fadeUpEndSeconds) {
-    inFadeUpPeriod = (currentSeconds >= dimEndSeconds && currentSeconds < fadeUpEndSeconds);
-  } else {
-    inFadeUpPeriod = (currentSeconds >= dimEndSeconds || currentSeconds < fadeUpEndSeconds);
-  }
+  // Handle fade-up period
+  bool inFadeUpPeriod = isInTimePeriod(currentSeconds, dimEndSeconds, fadeUpEndSeconds);
   
   BrightnessState newState;
   if (inDimPeriod) {
@@ -144,28 +135,14 @@ void calculateBrightness(int currentSeconds, int dimStartSeconds, int dimEndSeco
     case FADING_DOWN: {
       unsigned long fadeElapsed = millis() - fadeStartMillis;
       unsigned long fadeDurationMs = (unsigned long)cfg.ledDimFadeDuration * 1000;
-      
-      if (fadeElapsed >= fadeDurationMs) {
-        currentMainBrightness = cfg.ledDimBrightness;
-      } else {
-        float progress = (float)fadeElapsed / (float)fadeDurationMs;
-        int brightnessRange = cfg.ledBrightness - cfg.ledDimBrightness;
-        currentMainBrightness = cfg.ledBrightness - (uint8_t)(brightnessRange * progress);
-      }
+      currentMainBrightness = interpolateBrightness(cfg.ledBrightness, cfg.ledDimBrightness, fadeElapsed, fadeDurationMs);
       break;
     }
       
     case FADING_UP: {
       unsigned long fadeElapsed = millis() - fadeStartMillis;
       unsigned long fadeDurationMs = (unsigned long)cfg.ledDimFadeDuration * 1000;
-      
-      if (fadeElapsed >= fadeDurationMs) {
-        currentMainBrightness = cfg.ledBrightness;
-      } else {
-        float progress = (float)fadeElapsed / (float)fadeDurationMs;
-        int brightnessRange = cfg.ledBrightness - cfg.ledDimBrightness;
-        currentMainBrightness = cfg.ledDimBrightness + (uint8_t)(brightnessRange * progress);
-      }
+      currentMainBrightness = interpolateBrightness(cfg.ledDimBrightness, cfg.ledBrightness, fadeElapsed, fadeDurationMs);
       break;
     }
   }
@@ -215,16 +192,19 @@ void updateBrightness(ESP32Time& rtc) {
     return;
   }
   
-  int dimStart = parseTimeToSeconds(cfg.ledDimStartTime.c_str());
-  int dimEnd = parseTimeToSeconds(cfg.ledDimEndTime.c_str());
+  int startHours, startMinutes, endHours, endMinutes;
+  bool validStart = parseTime(cfg.ledDimStartTime.c_str(), startHours, startMinutes);
+  bool validEnd = parseTime(cfg.ledDimEndTime.c_str(), endHours, endMinutes);
   
-  if (dimStart == -1 || dimEnd == -1) {
+  if (!validStart || !validEnd) {
     currentMainBrightness = cfg.ledBrightness;
-    currentColonBrightness = ledBrightness;
-    FastLED.setBrightness(ledBrightness);
+    currentColonBrightness = cfg.ledBrightness;
+    FastLED.setBrightness(cfg.ledBrightness);
     return;
   }
   
+  int dimStart = startHours * 3600 + startMinutes * 60;
+  int dimEnd = endHours * 3600 + endMinutes * 60;
   int currentSeconds = rtc.getHour(true) * 3600 + rtc.getMinute() * 60 + rtc.getSecond();
   uint8_t currentSecond = rtc.getSecond();
   

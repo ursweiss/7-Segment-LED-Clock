@@ -97,7 +97,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
         let fieldToTab = {};
         let currentVersion = '';
 
-        
+
         function showMessage(text, type) {
             const msg = document.getElementById('message');
             msg.textContent = text;
@@ -105,7 +105,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
             msg.style.display = 'block';
             setTimeout(() => msg.style.display = 'none', 5000);
         }
-        
+
         function updateFieldVisibility() {
             schema.groups.forEach(group => {
                 group.fields.forEach(field => {
@@ -122,7 +122,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                                 } else {
                                     controlValue = controlInput.value;
                                 }
-                                
+
                                 if (controlValue == field.showIf.equals) {
                                     fieldDiv.classList.remove('hidden');
                                 } else {
@@ -134,7 +134,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 });
             });
         }
-        
+
         function showTab(tabId) {
             // Hide all tabs
             document.querySelectorAll('.tab-panel').forEach(panel => {
@@ -143,27 +143,27 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
             // Show selected tab
             const panel = document.getElementById('tab-' + tabId);
             if (panel) panel.classList.add('active');
-            
+
             // Update menu active state
             document.querySelectorAll('.sidebar-menu a').forEach(link => {
                 link.classList.remove('active');
             });
             const activeLink = document.querySelector('[data-tab="' + tabId + '"]');
             if (activeLink) activeLink.classList.add('active');
-            
+
             activeTab = tabId;
             localStorage.setItem('activeTab', tabId);
         }
-        
+
         function updateTabIndicators() {
             Object.keys(tabStates).forEach(tabId => {
                 const state = tabStates[tabId];
                 const menuItem = document.querySelector('[data-tab="' + tabId + '"]').parentElement;
-                
+
                 // Remove existing badges
                 const existingBadge = menuItem.querySelector('.badge');
                 if (existingBadge) existingBadge.remove();
-                
+
                 // Add error badge (priority)
                 if (state.hasErrors && state.errorCount > 0) {
                     const badge = document.createElement('span');
@@ -180,28 +180,28 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 }
             });
         }
-        
+
         function checkRestartRequired() {
             const formData = new FormData(document.getElementById('configForm'));
             requiresRestart = false;
-            
+
             for (let [key, value] of formData.entries()) {
                 const field = schema.groups.flatMap(g => g.fields).find(f => f.id === key);
                 if (field && field.applyMethod === 'restart') {
                     const currentValue = config[key];
                     let formValue = value;
-                    
+
                     if (field.type === 'number') formValue = parseInt(value);
                     else if (field.type === 'checkbox') formValue = 1;
                     else if (field.type === 'color') formValue = parseInt(value.substring(1), 16);
-                    
+
                     if (currentValue != formValue) {
                         requiresRestart = true;
                         break;
                     }
                 }
             }
-            
+
             // Check unchecked checkboxes
             schema.groups.forEach(group => {
                 group.fields.forEach(field => {
@@ -212,15 +212,15 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     }
                 });
             });
-            
+
             const submitBtn = document.querySelector('.footer .btn-primary');
             submitBtn.textContent = requiresRestart ? 'Save Configuration & Restart' : 'Save Configuration';
         }
-        
+
         function validateField(field, value) {
             const errors = [];
             const validation = field.validation || {};
-            
+
             if (validation.required && (!value || value.toString().trim() === '')) {
                 errors.push('This field is required');
             }
@@ -243,23 +243,23 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     errors.push('Invalid format');
                 }
             }
-            
+
             return errors;
         }
-        
+
         function updateFieldValidation(fieldId, isValid, errors = []) {
             const fieldDiv = document.getElementById('field-' + fieldId);
             if (!fieldDiv) return;
-            
+
             const input = fieldDiv.querySelector('input, select');
             const existingIcon = fieldDiv.querySelector('.field-icon');
             const existingError = fieldDiv.querySelector('.field-error');
-            
+
             // Remove existing feedback
             if (existingIcon) existingIcon.remove();
             if (existingError) existingError.remove();
             input.classList.remove('valid', 'invalid');
-            
+
             // Add new feedback
             if (isValid) {
                 input.classList.add('valid');
@@ -273,13 +273,13 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 icon.className = 'field-icon invalid';
                 icon.textContent = '✗';
                 fieldDiv.appendChild(icon);
-                
+
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'field-error';
                 errorDiv.textContent = errors[0];
                 fieldDiv.appendChild(errorDiv);
             }
-            
+
             // Update tab state
             const tabId = fieldToTab[fieldId];
             if (tabId && tabStates[tabId]) {
@@ -289,19 +289,19 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     const fDiv = document.getElementById('field-' + f.id);
                     if (fDiv && fDiv.querySelector('.field-error')) errorCount++;
                 });
-                
+
                 tabStates[tabId].hasErrors = errorCount > 0;
                 tabStates[tabId].errorCount = errorCount;
                 updateTabIndicators();
             }
         }
-        
+
         function checkFieldChange(fieldId, value) {
             const field = schema.groups.flatMap(g => g.fields).find(f => f.id === fieldId);
             if (!field) return;
-            
+
             const tabId = fieldToTab[fieldId];
-            
+
             if (tabId && tabStates[tabId]) {
                 // Count changed fields in this tab
                 let changeCount = 0;
@@ -313,10 +313,10 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                         if (fieldDiv && fieldDiv.classList.contains('hidden')) {
                             return; // Skip this field
                         }
-                        
+
                         let fValue = fInput.type === 'checkbox' ? (fInput.checked ? 1 : 0) : fInput.value;
                         let fOriginal = originalConfig[f.id];
-                        
+
                         // Normalize values for comparison
                         if (f.type === 'number') {
                             fValue = parseInt(fValue);
@@ -330,28 +330,28 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                             fValue = String(fValue);
                             fOriginal = String(fOriginal);
                         }
-                        
+
                         if (fValue != fOriginal) changeCount++;
                     }
                 });
-                
+
                 tabStates[tabId].hasChanges = changeCount > 0;
                 tabStates[tabId].changeCount = changeCount;
                 updateTabIndicators();
             }
         }
-        
+
         async function loadSchema() {
             const response = await fetch('/api/schema');
             schema = await response.json();
-            
+
             // Sort groups by TAB_ORDER
             schema.groups.sort((a, b) => {
                 const indexA = TAB_ORDER.indexOf(a.id);
                 const indexB = TAB_ORDER.indexOf(b.id);
                 return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
             });
-            
+
             // Build fieldToTab mapping and initialize tabStates
             schema.groups.forEach(group => {
                 tabStates[group.id] = { hasChanges: false, hasErrors: false, errorCount: 0, changeCount: 0 };
@@ -360,7 +360,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 });
             });
         }
-        
+
         function validateAllFields() {
             schema.groups.forEach(group => {
                 group.fields.forEach(field => {
@@ -373,7 +373,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 });
             });
         }
-        
+
         async function loadConfig() {
             // Check for unsaved changes
             const hasUnsavedChanges = Object.values(tabStates).some(state => state.hasChanges);
@@ -382,7 +382,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     return;
                 }
             }
-            
+
             try {
                 const response = await fetch('/api/config');
                 config = await response.json();
@@ -394,13 +394,13 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 showMessage('Failed to load configuration', 'error');
             }
         }
-        
+
         function renderForm() {
             const menuContainer = document.getElementById('sidebarMenu');
             const panelsContainer = document.getElementById('tabPanels');
             menuContainer.innerHTML = '';
             panelsContainer.innerHTML = '';
-            
+
             schema.groups.forEach((group, index) => {
                 // Create menu item
                 const menuItem = document.createElement('li');
@@ -417,7 +417,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 }
                 menuItem.appendChild(menuLink);
                 menuContainer.appendChild(menuItem);
-                
+
                 // Create tab panel
                 const panel = document.createElement('div');
                 panel.className = 'tab-panel';
@@ -425,12 +425,12 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 if (index === 0 || group.id === activeTab) {
                     panel.classList.add('active');
                 }
-                
+
                 const title = document.createElement('div');
                 title.className = 'group-title';
                 title.textContent = group.label;
                 panel.appendChild(title);
-                
+
                 // Sort fields: checkboxes with 'Enabled' in id first, then original order
                 const sortedFields = [...group.fields].sort((a, b) => {
                     const aIsEnabledCheckbox = a.type === 'checkbox' && a.id.includes('Enabled');
@@ -439,15 +439,15 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     if (!aIsEnabledCheckbox && bIsEnabledCheckbox) return 1;
                     return 0;
                 });
-                
+
                 sortedFields.forEach(field => {
                     const fieldDiv = document.createElement('div');
                     fieldDiv.className = 'field';
                     fieldDiv.id = 'field-' + field.id;
-                    
+
                     let input = '';
                     const value = config[field.id] !== undefined ? config[field.id] : field.default;
-                    
+
                     if (field.type === 'text' || field.type === 'password' || field.type === 'time') {
                         input = '<input type="' + field.type + '" name="' + field.id + '" value="' + value + '">';
                     } else if (field.type === 'number') {
@@ -464,56 +464,56 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                         });
                         input += '</select>';
                     }
-                    
+
                     fieldDiv.innerHTML = '<label>' + field.label + '</label>' + input + (field.help ? '<div class="field-help">' + field.help + '</div>' : '');
-                    
+
                     // Add event listeners
                     const inputElement = fieldDiv.querySelector('input, select');
                     if (inputElement) {
                         inputElement.addEventListener('change', function() {
                             checkRestartRequired();
-                            
+
                             // Update field visibility based on showIf conditions
                             updateFieldVisibility();
-                            
+
                             // Validate field
                             const val = this.type === 'checkbox' ? (this.checked ? 1 : 0) : this.value;
                             const errors = validateField(field, val);
                             updateFieldValidation(field.id, errors.length === 0, errors);
-                            
+
                             // Check for changes
                             checkFieldChange(field.id, val);
                         });
-                        
+
                         inputElement.addEventListener('blur', function() {
                             const val = this.type === 'checkbox' ? (this.checked ? 1 : 0) : this.value;
                             const errors = validateField(field, val);
                             updateFieldValidation(field.id, errors.length === 0, errors);
                         });
                     }
-                    
+
                     panel.appendChild(fieldDiv);
                 });
-                
+
                 panelsContainer.appendChild(panel);
             });
-            
+
             // Add Update tab (not part of schema)
             renderUpdateTab(menuContainer, panelsContainer);
-            
+
             // Restore active tab from localStorage
             const savedTab = localStorage.getItem('activeTab');
             if (savedTab && (schema.groups.find(g => g.id === savedTab) || savedTab === 'update')) {
                 showTab(savedTab);
             }
-            
+
             // Update field visibility based on showIf conditions
             updateFieldVisibility();
-            
+
             // Validate all fields on initial load
             validateAllFields();
         }
-        
+
         function renderUpdateTab(menuContainer, panelsContainer) {
             // Add menu item
             const menuItem = document.createElement('li');
@@ -527,26 +527,26 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
             };
             menuItem.appendChild(menuLink);
             menuContainer.appendChild(menuItem);
-            
+
             // Initialize tab state
             tabStates['update'] = { hasChanges: false, hasErrors: false, errorCount: 0, changeCount: 0 };
-            
+
             // Create tab panel
             const panel = document.createElement('div');
             panel.className = 'tab-panel';
             panel.id = 'tab-update';
-            
+
             const title = document.createElement('div');
             title.className = 'group-title';
             title.textContent = 'Firmware Update';
             panel.appendChild(title);
-            
+
             // Current version display
             const versionDiv = document.createElement('div');
             versionDiv.style.marginBottom = '20px';
             versionDiv.innerHTML = '<strong>Current Version:</strong> <span id=\"currentVersion\">Loading...</span>';
             panel.appendChild(versionDiv);
-            
+
             // Instructions
             const instructions = document.createElement('div');
             instructions.style.marginBottom = '25px';
@@ -563,7 +563,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 </ol>
             `;
             panel.appendChild(instructions);
-            
+
             // File upload form
             const uploadForm = document.createElement('div');
             uploadForm.style.marginBottom = '20px';
@@ -576,7 +576,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 <button type=\"button\" id=\"uploadBtn\" class=\"btn btn-primary\" disabled onclick=\"uploadFirmware()\">Update Firmware</button>
             `;
             panel.appendChild(uploadForm);
-            
+
             // Progress bar (hidden initially)
             const progressDiv = document.createElement('div');
             progressDiv.id = 'uploadProgress';
@@ -591,15 +591,15 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 </div>
             `;
             panel.appendChild(progressDiv);
-            
+
             panelsContainer.appendChild(panel);
-            
+
             // File input change handler
             setTimeout(() => {
                 const fileInput = document.getElementById('firmwareFile');
                 const uploadBtn = document.getElementById('uploadBtn');
                 const fileInfo = document.getElementById('fileInfo');
-                
+
                 fileInput.addEventListener('change', function() {
                     if (this.files.length > 0) {
                         const file = this.files[0];
@@ -611,7 +611,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                         uploadBtn.disabled = true;
                     }
                 });
-                
+
                 // Load current version
                 fetch('/api/version')
                     .then(r => r.json())
@@ -624,47 +624,47 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     });
             }, 100);
         }
-        
+
         async function uploadFirmware() {
             const fileInput = document.getElementById('firmwareFile');
             const file = fileInput.files[0];
-            
+
             if (!file) {
                 alert('Please select a firmware file');
                 return;
             }
-            
+
             if (!file.name.endsWith('.bin')) {
                 alert('Invalid file type. Please select a .bin file');
                 return;
             }
-            
+
             if (file.size > 5 * 1024 * 1024) {
                 alert('File too large. Maximum size is 5 MB');
                 return;
             }
-            
+
             if (!confirm(`Upload firmware: ${file.name}?\n\nEnsure stable power supply. Do not interrupt the update process.`)) {
                 return;
             }
-            
+
             const uploadBtn = document.getElementById('uploadBtn');
             const progressDiv = document.getElementById('uploadProgress');
             const uploadStatus = document.getElementById('uploadStatus');
             const progressBar = document.getElementById('progressBar');
             const progressText = document.getElementById('progressText');
-            
+
             // Disable upload button and show progress
             uploadBtn.disabled = true;
             fileInput.disabled = true;
             progressDiv.style.display = 'block';
             uploadStatus.textContent = 'Uploading firmware...';
-            
+
             const formData = new FormData();
             formData.append('firmware', file);
-            
+
             const xhr = new XMLHttpRequest();
-            
+
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
                     const percent = Math.round((e.loaded / e.total) * 100);
@@ -672,14 +672,14 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     progressText.textContent = percent + '%';
                 }
             });
-            
+
             xhr.addEventListener('load', () => {
                 if (xhr.status === 200) {
                     progressBar.style.background = '#27ae60';
                     uploadStatus.textContent = 'Update successful! Device will restart in 5 seconds...';
                     progressBar.style.width = '100%';
                     progressText.textContent = '100%';
-                    
+
                     let countdown = 5;
                     const countdownInterval = setInterval(() => {
                         countdown--;
@@ -698,18 +698,18 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     fileInput.disabled = false;
                 }
             });
-            
+
             xhr.addEventListener('error', () => {
                 progressBar.style.background = '#e74c3c';
                 uploadStatus.textContent = 'Upload error. Please check connection and try again.';
                 uploadBtn.disabled = false;
                 fileInput.disabled = false;
             });
-            
+
             xhr.open('POST', '/api/update');
             xhr.send(formData);
         }
-        
+
         async function saveConfig() {
             // Check for validation errors
             const hasErrors = Object.values(tabStates).some(state => state.hasErrors);
@@ -720,10 +720,10 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 alert('Please fix errors in: ' + tabsWithErrors.join(', '));
                 return;
             }
-            
+
             const formData = new FormData(document.getElementById('configForm'));
             const data = {};
-            
+
             for (let [key, value] of formData.entries()) {
                 const field = schema.groups.flatMap(g => g.fields).find(f => f.id === key);
                 if (field) {
@@ -738,7 +738,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     }
                 }
             }
-            
+
             // Handle unchecked checkboxes
             schema.groups.forEach(group => {
                 group.fields.forEach(field => {
@@ -747,7 +747,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     }
                 });
             });
-            
+
             try {
                 const response = await fetch('/api/config', {
                     method: 'POST',
@@ -759,7 +759,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     showMessage('Configuration saved successfully', 'success');
                     config = data;
                     originalConfig = JSON.parse(JSON.stringify(data));
-                    
+
                     // Reset all tab states
                     Object.keys(tabStates).forEach(tabId => {
                         tabStates[tabId].hasChanges = false;
@@ -768,11 +768,11 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                         tabStates[tabId].changeCount = 0;
                     });
                     updateTabIndicators();
-                    
+
                     // Clear all validation icons
                     document.querySelectorAll('.field-icon, .field-error').forEach(el => el.remove());
                     document.querySelectorAll('input, select').forEach(el => el.classList.remove('valid', 'invalid'));
-                    
+
                     if (requiresRestart) {
                         showMessage('Configuration saved. Restarting device...', 'success');
                         setTimeout(async () => {
@@ -787,7 +787,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 showMessage('Failed to save configuration', 'error');
             }
         }
-        
+
         async function restart() {
             // Check for unsaved changes
             const hasUnsavedChanges = Object.values(tabStates).some(state => state.hasChanges);
@@ -796,7 +796,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     return;
                 }
             }
-            
+
             if (!confirm('Restart the device? This will take about 10 seconds.')) return;
             try {
                 await fetch('/api/restart', {method: 'POST'});
@@ -806,7 +806,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 showMessage('Restart initiated', 'success');
             }
         }
-        
+
         // Warn on page reload if there are unsaved changes
         window.addEventListener('beforeunload', (e) => {
             const hasUnsavedChanges = Object.values(tabStates).some(state => state.hasChanges);
@@ -815,7 +815,7 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 e.returnValue = '';
             }
         });
-        
+
         (async () => {
             await loadSchema();
             await loadConfig();

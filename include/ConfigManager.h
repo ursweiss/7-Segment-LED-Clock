@@ -67,7 +67,6 @@ public:
   
   // Helper to convert palette to/from index
   static CRGBPalette16 getPaletteByIndex(uint8_t index);
-  static uint8_t getPaletteIndex(const CRGBPalette16& palette);
   
 private:
   Config config;

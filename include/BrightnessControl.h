@@ -3,6 +3,8 @@
 
 #include <ESP32Time.h>
 
+// Public API
+bool parseTime(const char* timeStr, int& hours, int& minutes);
 void initBrightnessControl();
 void updateBrightness(ESP32Time& rtc);
 uint8_t getCurrentMainBrightness();

@@ -77,12 +77,17 @@ const uint8_t PROGMEM ledChar[31][7] = {
   {0,0,0,0,0,0,0}  // off (30)
 };
 
+void updatePaletteFromConfig() {
+  Config& cfg = configManager.getConfig();
+  currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
+  currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
+}
+
 void initLEDs() {
   Config& cfg = configManager.getConfig();
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(cfg.ledBrightness);
-  currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
-  currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
+  updatePaletteFromConfig();
   charBlendIndex = colorIndex;
 }
 
@@ -164,8 +169,7 @@ void toggleSecondIndicator() {
     hsv2rgb_rainbow(tempColorHsv, tmpDarkColor);
   } else if (cfg.clockColorMode == 1) {
     colorCorrection = 2 * cfg.clockColorCharBlend;
-    currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
-    currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
+    updatePaletteFromConfig();
     tmpColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), cfg.ledBrightness, currentBlending);
     tmpDarkColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), darkBrightness, currentBlending);
   }
@@ -186,8 +190,7 @@ void secondIndicatorOn() {
     tmpColor = cfg.clockColorSolid;
   } else if (cfg.clockColorMode == 1) {
     colorCorrection = 2 * cfg.clockColorCharBlend;
-    currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
-    currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
+    updatePaletteFromConfig();
     tmpColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), currentBrightness, currentBlending);
   }
   fill_solid(&(leds[NUM_LEDS-2]), 2, tmpColor);
@@ -209,8 +212,7 @@ void secondIndicatorDim() {
     hsv2rgb_rainbow(tempColorHsv, tmpDarkColor);
   } else if (cfg.clockColorMode == 1) {
     colorCorrection = 2 * cfg.clockColorCharBlend;
-    currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
-    currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
+    updatePaletteFromConfig();
     tmpDarkColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), darkBrightness, currentBlending);
   }
   fill_solid(&(leds[NUM_LEDS-2]), 2, tmpDarkColor);
@@ -229,8 +231,7 @@ void displayCharacter(uint8_t charNum, uint8_t position, bool customize, CRGBPal
       if (cfg.clockColorMode == 0) {
         currentColor = cfg.clockColorSolid;
       } else if (cfg.clockColorMode == 1) {
-        currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
-        currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
+        updatePaletteFromConfig();
         currentColor = ColorFromPalette(currentPalette, charBlendIndex, cfg.ledBrightness, currentBlending);
       }
     }
@@ -285,7 +286,8 @@ void displayTime(ESP32Time& rtc) {
     sprintf(displayWord, "%d%d%d%d", hourNibble10, hourNibble, minNibble10, minNibble);
   }
   displayClockface(displayWord);
-  if (clockSecIndicatorDiff > 0) {
+  Config& cfg = configManager.getConfig();
+  if (cfg.clockSecIndicatorDiff > 0) {
     if (secondIndicatorState) {
       secondIndicatorOn();
     } else {
@@ -296,6 +298,7 @@ void displayTime(ESP32Time& rtc) {
 }
 
 void displayTemperature() {
+  Config& cfg = configManager.getConfig();
   if (owmTemperature == -128) {
     return;
   }
@@ -303,14 +306,14 @@ void displayTemperature() {
   uint8_t customBlendIndex;
   int8_t owmTemperature2 = owmTemperature;
   bool negative = owmTemperature < 0;
-  if (owmTemperature < owmTempMin) {
+  if (owmTemperature < cfg.owmTempMin) {
     customBlendIndex = 160;
-  } else if (owmTemperature > owmTempMax) {
+  } else if (owmTemperature > cfg.owmTempMax) {
     customBlendIndex = 0;
   } else if (negative) {
-    customBlendIndex = map(owmTemperature, owmTempMin, (owmUnits == "metric" ? -1 : 33), 160, 127);
+    customBlendIndex = map(owmTemperature, cfg.owmTempMin, (cfg.owmUnits == "metric" ? -1 : 33), 160, 127);
   } else {
-    customBlendIndex = map(owmTemperature, (owmUnits == "metric" ? 0 : 32), owmTempMax, 126, 0);
+    customBlendIndex = map(owmTemperature, (cfg.owmUnits == "metric" ? 0 : 32), cfg.owmTempMax, 126, 0);
   }
   if (negative) {
     owmTemperature2 = owmTemperature * -1;
@@ -318,9 +321,9 @@ void displayTemperature() {
   int tempNibble10 = owmTemperature2 / 10;
   int tempNibble = owmTemperature2 % 10;
   if (negative && tempNibble10 < 1) {
-    sprintf(displayWord, "%c%d%c%c", '-', tempNibble, 'z', (owmUnits == "metric" ? 'C' : 'F'));
+    sprintf(displayWord, "%c%d%c%c", '-', tempNibble, 'z', (cfg.owmUnits == "metric" ? 'C' : 'F'));
   } else {
-    sprintf(displayWord, "%d%d%c%c", tempNibble10, tempNibble, 'z', (owmUnits == "metric" ? 'C' : 'F'));
+    sprintf(displayWord, "%d%d%c%c", tempNibble10, tempNibble, 'z', (cfg.owmUnits == "metric" ? 'C' : 'F'));
   }
   displayClockface(displayWord, true, RainbowColors_p, customBlendIndex);
   FastLED.show();
@@ -344,9 +347,7 @@ void displayStatus(uint8_t messageId) {
       displayMessage = "Conn";
       break;
   }
-  #ifdef DEBUG
-  Serial.println(serialMessage);
-  #endif
+  LOG_INFO(serialMessage.c_str());
   displayClockface(displayMessage);
   FastLED.show();
 }
@@ -360,9 +361,7 @@ void displayError(uint8_t errorId) {
   }
   int tempNibble10 = errorId / 10;
   int tempNibble = errorId % 10;
-  #ifdef DEBUG
-  Serial.println(serialMessage);
-  #endif
+  LOG_ERROR(serialMessage.c_str());
   sprintf(displayWord, "Er%d%d", tempNibble10, tempNibble);
   displayClockface(displayWord);
   FastLED.show();
