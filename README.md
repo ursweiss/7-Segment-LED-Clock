@@ -1,6 +1,6 @@
 # 7-Segment LED Clock - PlatformIO Migration
 
-> **⚠️ Work in Progress**: This project is currently undergoing a complete refactoring from Arduino IDE to PlatformIO. The current codebase is functional but documentation and testing are ongoing. For the stable original Arduino version, see the [v1.0.0 release tag](https://github.com/ursweiss/7-Segment-LED-Clock/releases/tag/v1.0.0).
+> **⚠️ Work in Progress**: This project is currently undergoing a complete refactoring from Arduino IDE to PlatformIO. The current codebase is functional but some features, documentation and testing are ongoing, and it may still contains some bugs. For the stable original Arduino version, see the [v1.0.0 release tag](https://github.com/ursweiss/7-Segment-LED-Clock/releases/tag/v1.0.0).
 
 Arduino code for my beautiful 3D printed LED clock in a retro 7 segment display style.
 
