@@ -1,13 +1,17 @@
 # 7-Segment LED Clock - PlatformIO Migration
 
-This project has been successfully refactored from Arduino IDE to PlatformIO with modern libraries and clean modular architecture.
+> **⚠️ Work in Progress**: This project is currently undergoing a complete refactoring from Arduino IDE to PlatformIO. The current codebase is functional but documentation and testing are ongoing. For the stable original Arduino version, see the [v1.0.0 release tag](https://github.com/ursweiss/7-Segment-LED-Clock/releases/tag/v1.0.0).
+
+Arduino code for my beautiful 3D printed LED clock in a retro 7 segment display style.
+
+You can find more details about the project and all downloadable files (STL, 3MF, STEP) [on Printables.com](https://www.printables.com/model/68013-7-segment-led-clock).
 
 ## Project Structure
 
 ```
 7-Segment-LED-Clock/
 ├── .github/
-│   └── copilot-instructions.md    # GitHub Copilot development guidelines
+│   └── copilot-instructions.md     # GitHub Copilot development guidelines
 ├── include/
 │   ├── config.h                    # Default configuration values
 │   ├── BrightnessControl.h         # Auto-dimming system
@@ -71,12 +75,6 @@ This project has been successfully refactored from Arduino IDE to PlatformIO wit
   - Configurable dim period (start/end times)
   - Smooth brightness fading with adjustable duration
   - Independent colon brightness control
-
-### 🔮 Future Enhancements
-
-- Additional display modes and animations
-- Weather forecast display
-- Multi-timezone support
 
 ## Setup Instructions
 
@@ -267,8 +265,6 @@ curl -X POST http://ledclock.local/api/update \
   -F "firmware=@.pio/build/esp32dev/firmware.bin"
 ```
 
-**Note:** API key values are masked in GET responses for security (e.g., `owmApiKey` shows as `***...***`).
-
 ## Character Set
 
 The 7-segment display supports:
@@ -415,6 +411,7 @@ Copyright (c) 2021 Urs Weiss
 
 - **Prusa Printers**: https://www.prusaprinters.org/prints/68013-7-segment-led-clock
 - **GitHub**: https://github.com/ursweiss/7-Segment-LED-Clock
+- **Original Version**: https://github.com/ursweiss/7-Segment-LED-Clock/releases/tag/v1.0.0
 - **PlatformIO**: https://platformio.org/
 - **FastLED**: https://github.com/FastLED/FastLED
 - **Open-Meteo**: https://open-meteo.com/ (free weather API, no key required)
