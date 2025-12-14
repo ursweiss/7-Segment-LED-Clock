@@ -1,0 +1,111 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit
+# Setup: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Whitespace and formatting
+      - id: trailing-whitespace
+        name: Remove trailing whitespace
+      - id: end-of-file-fixer
+        name: Ensure files end with newline
+      - id: mixed-line-ending
+        name: Ensure consistent line endings (LF)
+        args: ['--fix=lf']
+
+      # File checks
+      - id: check-added-large-files
+        name: Check for large files (>500KB)
+        args: ['--maxkb=500']
+      - id: check-case-conflict
+        name: Check for case conflicts in filenames
+      - id: check-merge-conflict
+        name: Check for merge conflict markers
+
+      # JSON/YAML validation
+      - id: check-json
+        name: Validate JSON files
+      - id: check-yaml
+        name: Validate YAML files
+
+      # Code security
+      - id: detect-private-key
+        name: Detect private keys
+
+  # C/C++ formatting (for ESP32/Arduino projects)
+  - repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+      - id: clang-format
+        name: Format C/C++ code
+        args: ['--style=Google', '-i']
+        exclude: ^\.pio/
+        files: \.(cpp|h|ino)$
+        # Note: Requires clang-format to be installed
+        # macOS: brew install clang-format
+        # Disabled by default - uncomment 'stages' line below to enable
+        stages: [manual]
+
+  # Python code quality (for PlatformIO scripts if any)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.8
+    hooks:
+      - id: ruff
+        name: Lint Python files
+        args: ['--fix']
+
+  # Markdown formatting
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.17
+    hooks:
+      - id: mdformat
+        name: Format Markdown files
+        additional_dependencies:
+          - mdformat-gfm  # GitHub Flavored Markdown
+          - mdformat-frontmatter
+
+  # PlatformIO specific checks
+  - repo: local
+    hooks:
+      - id: check-config-h
+        name: Check config.h exists
+        entry: bash
+        language: system
+        pass_filenames: false
+        always_run: true
+        args:
+          - -c
+          - 'test -f include/config.h || { echo "Error: include/config.h not found"; exit 1; }'
+
+      - id: check-flash-usage
+        name: Check ESP32 flash usage
+        entry: bash
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [manual]
+        args:
+          - -c
+          - |
+            if [ -d .pio/build/esp32dev ]; then
+              size_output=$(xtensa-esp32-elf-size -A .pio/build/esp32dev/firmware.elf 2>/dev/null | grep "\.flash\.text" | awk '{print $2}')
+              if [ -n "$size_output" ] && [ "$size_output" -gt 1245184 ]; then
+                echo "Warning: Flash usage may exceed 95%"
+              fi
+            fi
+
+# Global settings
+default_language_version:
+  python: python3
+
+# Files to exclude from all hooks
+exclude: |
+  (?x)^(
+    \.pio/.*|
+    \.vscode/.*|
+    \.git/.*
+  )$

@@ -299,21 +299,39 @@ void displayTime(ESP32Time& rtc) {
 
 void displayTemperature() {
   Config& cfg = configManager.getConfig();
-  if (owmTemperature == -128) {
+
+  // Handle error codes
+  if (owmTemperature == -127) {
+    // Weather API failure
+    displayClockface("Er03");
+    FastLED.show();
+    lastTempDisplayTime = millis();
     return;
   }
+  if (owmTemperature == -126) {
+    // Unrecognized temperature unit
+    displayClockface("Er04");
+    FastLED.show();
+    lastTempDisplayTime = millis();
+    return;
+  }
+  if (owmTemperature == -128) {
+    // No data yet
+    return;
+  }
+
   secondIndicatorOff();
   uint8_t customBlendIndex;
   int8_t owmTemperature2 = owmTemperature;
   bool negative = owmTemperature < 0;
-  if (owmTemperature < cfg.owmTempMin) {
+  if (owmTemperature < cfg.weatherTempMin) {
     customBlendIndex = 160;
-  } else if (owmTemperature > cfg.owmTempMax) {
+  } else if (owmTemperature > cfg.weatherTempMax) {
     customBlendIndex = 0;
   } else if (negative) {
-    customBlendIndex = map(owmTemperature, cfg.owmTempMin, (cfg.owmUnits == "metric" ? -1 : 33), 160, 127);
+    customBlendIndex = map(owmTemperature, cfg.weatherTempMin, (cfg.locationUnits == "metric" ? -1 : 33), 160, 127);
   } else {
-    customBlendIndex = map(owmTemperature, (cfg.owmUnits == "metric" ? 0 : 32), cfg.owmTempMax, 126, 0);
+    customBlendIndex = map(owmTemperature, (cfg.locationUnits == "metric" ? 0 : 32), cfg.weatherTempMax, 126, 0);
   }
   if (negative) {
     owmTemperature2 = owmTemperature * -1;
@@ -321,9 +339,17 @@ void displayTemperature() {
   int tempNibble10 = owmTemperature2 / 10;
   int tempNibble = owmTemperature2 % 10;
   if (negative && tempNibble10 < 1) {
-    sprintf(displayWord, "%c%d%c%c", '-', tempNibble, 'z', (cfg.owmUnits == "metric" ? 'C' : 'F'));
+    // Negative single digit: -1 to -9 shows "-X"
+    sprintf(displayWord, "%c%d%c%c", '-', tempNibble, 'z', (cfg.locationUnits == "metric" ? 'C' : 'F'));
+  } else if (negative) {
+    // Negative double digit: -10 and below shows "-XX"
+    sprintf(displayWord, "%c%d%c%c", '-', owmTemperature2, 'z', (cfg.locationUnits == "metric" ? 'C' : 'F'));
+  } else if (tempNibble10 < 1) {
+    // Positive single digit: 0-9 shows " X" (space instead of leading zero)
+    sprintf(displayWord, "%c%d%c%c", ' ', tempNibble, 'z', (cfg.locationUnits == "metric" ? 'C' : 'F'));
   } else {
-    sprintf(displayWord, "%d%d%c%c", tempNibble10, tempNibble, 'z', (cfg.owmUnits == "metric" ? 'C' : 'F'));
+    // Positive double digit: 10+ shows "XX"
+    sprintf(displayWord, "%d%d%c%c", tempNibble10, tempNibble, 'z', (cfg.locationUnits == "metric" ? 'C' : 'F'));
   }
   displayClockface(displayWord, true, RainbowColors_p, customBlendIndex);
   FastLED.show();

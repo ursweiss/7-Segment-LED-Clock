@@ -30,51 +30,107 @@ int8_t owmTemperature = -128;
 
 void fetchWeather() {
   Config& cfg = configManager.getConfig();
-  if (!cfg.owmTempEnabled) {
+
+  // Check if weather is enabled
+  if (!cfg.weatherTempEnabled) {
     return;
   }
-  LOG_INFO("Fetching weather from OpenWeatherMap...");
-  
+
+  // Validate coordinates are configured
+  if (cfg.locationLatitude.isEmpty() || cfg.locationLongitude.isEmpty()) {
+    LOG_WARN("Weather disabled: coordinates not configured");
+    return;
+  }
+
+  LOG_INFO("Fetching weather from Open-Meteo...");
+
   WiFiClientSecure client;
-  client.setInsecure(); // Skip certificate validation for simplicity
-  
+  client.setInsecure();
+
   HTTPClient http;
-  String url = "https://" + cfg.owmApiServer + "/data/2.5/forecast?q=" + cfg.owmLocation + "&appid=" + cfg.owmApiKey + "&cnt=1&units=" + cfg.owmUnits;
-  
+  http.setTimeout(5000);
+
+  String url = "https://api.open-meteo.com/v1/forecast?current=temperature_2m&latitude=" + cfg.locationLatitude + "&longitude=" + cfg.locationLongitude;
+
   if (!http.begin(client, url)) {
     LOG_ERROR("Failed to initialize HTTPS connection");
+    owmTemperature = -127; // Er03
     return;
   }
-  
+
   int httpCode = http.GET();
   if (httpCode > 0) {
     if (httpCode == HTTP_CODE_OK) {
       String payload = http.getString();
-      LOG_DEBUG("API response received");
-      DynamicJsonDocument jsonBuffer(5000);
+      LOG_DEBUG("Weather API response received");
+
+      DynamicJsonDocument jsonBuffer(2048);
       DeserializationError error = deserializeJson(jsonBuffer, payload);
       if (error) {
         LOG_ERRORF("Weather JSON parsing failed: %s", error.c_str());
+        owmTemperature = -127; // Er03
         http.end();
         return;
       }
-      if (jsonBuffer.containsKey("list") && jsonBuffer["list"].size() > 0) {
-        JsonObject main = jsonBuffer["list"][0]["main"];
-        if (main.containsKey("temp")) {
-          float tempRaw = main["temp"];
-          owmTemperature = round(tempRaw);
-          LOG_INFOF("Temperature: %d%s", owmTemperature, cfg.owmUnits == "metric" ? "°C" : "°F");
-        } else {
-          LOG_ERROR("Temperature field missing in API response");
-        }
-      } else {
-        LOG_ERROR("Weather API returned invalid JSON structure");
+
+      // Parse temperature value
+      if (!jsonBuffer.containsKey("current") || !jsonBuffer["current"].containsKey("temperature_2m")) {
+        LOG_ERROR("Temperature field missing in API response");
+        owmTemperature = -127; // Er03
+        http.end();
+        return;
       }
+
+      float tempValue = jsonBuffer["current"]["temperature_2m"];
+
+      // Parse temperature unit
+      if (!jsonBuffer.containsKey("current_units") || !jsonBuffer["current_units"].containsKey("temperature_2m")) {
+        LOG_ERROR("Temperature unit missing in API response");
+        owmTemperature = -126; // Er04
+        http.end();
+        return;
+      }
+
+      String tempUnit = jsonBuffer["current_units"]["temperature_2m"].as<String>();
+
+      // Determine if conversion needed
+      bool isCelsius = tempUnit.indexOf("°C") >= 0 || tempUnit.indexOf("C") >= 0;
+      bool isFahrenheit = tempUnit.indexOf("°F") >= 0 || tempUnit.indexOf("F") >= 0;
+
+      if (!isCelsius && !isFahrenheit) {
+        LOG_ERRORF("Unrecognized temperature unit: %s", tempUnit.c_str());
+        owmTemperature = -126; // Er04
+        http.end();
+        return;
+      }
+
+      // Convert if needed
+      bool needMetric = cfg.locationUnits == "metric";
+      bool needImperial = cfg.locationUnits == "imperial";
+
+      if ((needMetric && isFahrenheit) || (needImperial && isCelsius)) {
+        if (needMetric) {
+          // Convert F to C
+          tempValue = (tempValue - 32.0) * 5.0 / 9.0;
+          LOG_DEBUGF("Converted %s to °C", tempUnit.c_str());
+        } else {
+          // Convert C to F
+          tempValue = (tempValue * 9.0 / 5.0) + 32.0;
+          LOG_DEBUGF("Converted %s to °F", tempUnit.c_str());
+        }
+      }
+
+      // Round to integer
+      owmTemperature = (int8_t)round(tempValue);
+      LOG_INFOF("Temperature: %d%s", owmTemperature, needMetric ? "°C" : "°F");
+
     } else {
       LOG_WARNF("Weather API HTTP error: %d", httpCode);
+      owmTemperature = -127; // Er03
     }
   } else {
     LOG_ERRORF("Weather API request failed: %s", http.errorToString(httpCode).c_str());
+    owmTemperature = -127; // Er03
   }
   http.end();
 }

@@ -17,15 +17,14 @@ inline uint8_t          clockColorCharBlend =       5;                          
 inline TBlendType       clockColorBlending =        LINEARBLEND;                        // PALETTE mode only: options are LINEARBLEND or NOBLEND - linear is 'cleaner'
 inline uint8_t          clockSecIndicatorDiff =     32;                                 // How much to darken down the second indicator when toggling (0-255) | 0 => Disabled
 
-// Open Weather Map
-inline String           owmApiServer =              "api.openweathermap.org";           // FQDN of API server (normally no need to change it)
-inline String           owmApiKey =                 "<your API key>";                   // Your OWM API key. Get a free one from https://openweathermap.org/price
-inline String           owmLocation =               "<your city>";                      // The location to get weather data from. API docs: https://openweathermap.org/current#name
-inline String           owmUnits =                  "metric";                           // "metric" or "imperial" | If switched to imperial, also change the owmTempMin/Max values below in the advanced section (values are limited to two digits, so f.ex. 99°F (~ 37°C) is the maximum possible to show
+// Weather (Open-Meteo API)
+inline String           locationLatitude =          "";                                 // Latitude in decimal degrees (-90 to 90). Use "Detect My Location" button in web UI or lookup at https://open-meteo.com/en/docs/geocoding-api
+inline String           locationLongitude =         "";                                 // Longitude in decimal degrees (-180 to 180)
+inline String           locationUnits =             "metric";                           // "metric" (°C) or "imperial" (°F) | If switched to imperial, also change weatherTempMin/Max values below (limited to two digits, max 99°F ~ 37°C)
 
-//// OWM Temperature
-inline uint8_t          owmTempEnabled =            1;                                  // Show temperature | 0 => No, 1 => Yes
-inline uint8_t          owmTempDisplayTime =        5;                                  // Show temperature for n seconds
+//// Weather Temperature Display
+inline uint8_t          weatherTempEnabled =        1;                                  // Show temperature | 0 => No, 1 => Yes
+inline uint8_t          weatherTempDisplayTime =    5;                                  // Show temperature for n seconds
 
 // FastLED
 inline uint8_t          ledBrightness =             128;                                // Maximum brightness (0-255)
@@ -50,10 +49,10 @@ inline String           portalSsid =                "LED-Clock-Config";         
 #define                 NUM_WIFI_CREDENTIALS        1                                   // How many WiFi credentials should be stored (if >1 it connects to the first it finds and tries the next one if it disconnects)
 #define                 PORTAL_SHOW_PW_ON_CONSOLE   false                               // Will show the config portal on console during boot if set to true
 
-// Open Weather Map
-inline int8_t           owmTempMin =                -40;                                // Min temperature (-99 is min possible. Value and lower temperature will be shown in blue and fades towards red if warmer)
-inline int8_t           owmTempMax =                50;                                 // Max temperature (99 is max possible. Value and higher temperature will be shown in red and fades towards blue if colder)
-inline const char*      owmTempSchedule =           "30 * * * * *";                     // When should the temperature be shown in "extended" cron format (see below)
+// Weather (Open-Meteo API)
+inline int8_t           weatherTempMin =            -40;                                // Min temperature (-99 is min possible. Value and lower temperature will be shown in blue and fades towards red if warmer)
+inline int8_t           weatherTempMax =            50;                                 // Max temperature (99 is max possible. Value and higher temperature will be shown in red and fades towards blue if colder)
+inline const char*      weatherTempSchedule =       "30 * * * * *";                     // When should the temperature be shown in "extended" cron format (see below)
 
 // FastLED
 #define                 LED_PIN                     4                                   // LED data pin to use on ESP
@@ -92,6 +91,6 @@ inline const char*      owmTempSchedule =           "30 * * * * *";             
 
 // NOTE: Using ranges (e.g. 1-5) lists (e.g. 1,2,3,4,5) and step values (e.g. */5) are NOT supported
 inline const char*      clockUpdateSchedule  =      "* * * * * *";                      // When to update clock. Default: Every second (SHOULD NOT be changed)
-inline const char*      owmUpdateSchedule =         "0 5 * * * *";                      // When to update weather data. Default: 5 past every hour (the free OWM only updates once every full hour)
+inline const char*      weatherUpdateSchedule =     "0 5 * * * *";                      // When to update weather data. Default: 5 past every hour
 
 #endif // CONFIG_H

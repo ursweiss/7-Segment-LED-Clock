@@ -121,46 +121,45 @@ const char SCHEMA_JSON[] PROGMEM = R"===(
     },
     {
       "id": "weather",
-      "label": "Weather & Temperature",
+      "label": "Weather Settings",
       "icon": "cloud",
       "fields": [
         {
-          "id": "owmApiServer",
-          "type": "text",
-          "label": "API Server",
-          "help": "OpenWeatherMap API server hostname",
-          "default": "api.openweathermap.org",
-          "validation": {
-            "required": true
-          },
-          "applyMethod": "restart"
+          "id": "weatherTempEnabled",
+          "type": "checkbox",
+          "label": "Show Temperature",
+          "help": "Display temperature periodically",
+          "default": 1,
+          "applyMethod": "instant"
         },
         {
-          "id": "owmApiKey",
-          "type": "password",
-          "label": "API Key",
-          "help": "Your OpenWeatherMap API key (free from openweathermap.org)",
+          "id": "locationLatitude",
+          "type": "text",
+          "label": "Latitude",
+          "help": "Decimal degrees (-90 to 90). Use 'Detect My Location' button or find at open-meteo.com",
           "default": "",
           "validation": {
-            "required": true,
-            "minLength": 32,
-            "maxLength": 32
+            "required": false,
+            "pattern": "^-?([0-9]|[1-8][0-9]|90)(\\.[0-9]+)?$"
           },
+          "showIf": {"field": "weatherTempEnabled", "equals": 1},
           "applyMethod": "restart"
         },
         {
-          "id": "owmLocation",
+          "id": "locationLongitude",
           "type": "text",
-          "label": "Location",
-          "help": "City and country code (e.g., Nürensdorf,CH)",
+          "label": "Longitude",
+          "help": "Decimal degrees (-180 to 180). Use 'Detect My Location' button or find at open-meteo.com",
           "default": "",
           "validation": {
-            "required": true
+            "required": false,
+            "pattern": "^-?([0-9]|[1-9][0-9]|1[0-7][0-9]|180)(\\.[0-9]+)?$"
           },
+          "showIf": {"field": "weatherTempEnabled", "equals": 1},
           "applyMethod": "restart"
         },
         {
-          "id": "owmUnits",
+          "id": "locationUnits",
           "type": "select",
           "label": "Units",
           "help": "Temperature units to display",
@@ -169,18 +168,11 @@ const char SCHEMA_JSON[] PROGMEM = R"===(
             {"value": "metric", "label": "Metric (°C)"},
             {"value": "imperial", "label": "Imperial (°F)"}
           ],
+          "showIf": {"field": "weatherTempEnabled", "equals": 1},
           "applyMethod": "restart"
         },
         {
-          "id": "owmTempEnabled",
-          "type": "checkbox",
-          "label": "Show Temperature",
-          "help": "Display temperature periodically",
-          "default": 1,
-          "applyMethod": "instant"
-        },
-        {
-          "id": "owmTempDisplayTime",
+          "id": "weatherTempDisplayTime",
           "type": "number",
           "label": "Display Duration",
           "help": "Seconds to show temperature",
@@ -189,11 +181,11 @@ const char SCHEMA_JSON[] PROGMEM = R"===(
             "min": 1,
             "max": 60
           },
-          "showIf": {"field": "owmTempEnabled", "equals": 1},
+          "showIf": {"field": "weatherTempEnabled", "equals": 1},
           "applyMethod": "instant"
         },
         {
-          "id": "owmTempMin",
+          "id": "weatherTempMin",
           "type": "number",
           "label": "Min Temperature",
           "help": "Minimum for color gradient (blue)",
@@ -202,10 +194,11 @@ const char SCHEMA_JSON[] PROGMEM = R"===(
             "min": -99,
             "max": 99
           },
+          "showIf": {"field": "weatherTempEnabled", "equals": 1},
           "applyMethod": "instant"
         },
         {
-          "id": "owmTempMax",
+          "id": "weatherTempMax",
           "type": "number",
           "label": "Max Temperature",
           "help": "Maximum for color gradient (red)",
@@ -214,10 +207,11 @@ const char SCHEMA_JSON[] PROGMEM = R"===(
             "min": -99,
             "max": 99
           },
+          "showIf": {"field": "weatherTempEnabled", "equals": 1},
           "applyMethod": "instant"
         },
         {
-          "id": "owmTempSchedule",
+          "id": "weatherTempSchedule",
           "type": "text",
           "label": "Display Schedule",
           "help": "Cron format: sec min hour day month dow",
@@ -226,10 +220,11 @@ const char SCHEMA_JSON[] PROGMEM = R"===(
             "required": true,
             "pattern": "^[\\\\d*,/-]+ [\\\\d*,/-]+ [\\\\d*,/-]+ [\\\\d*,/-]+ [\\\\d*,/-]+ [\\\\d*,/-]+$"
           },
+          "showIf": {"field": "weatherTempEnabled", "equals": 1},
           "applyMethod": "instant"
         },
         {
-          "id": "owmUpdateSchedule",
+          "id": "weatherUpdateSchedule",
           "type": "text",
           "label": "Update Schedule",
           "help": "Cron format: when to fetch weather",
@@ -238,6 +233,7 @@ const char SCHEMA_JSON[] PROGMEM = R"===(
             "required": true,
             "pattern": "^[\\\\d*,/-]+ [\\\\d*,/-]+ [\\\\d*,/-]+ [\\\\d*,/-]+ [\\\\d*,/-]+ [\\\\d*,/-]+$"
           },
+          "showIf": {"field": "weatherTempEnabled", "equals": 1},
           "applyMethod": "instant"
         }
       ]

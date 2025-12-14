@@ -1,3 +1,4 @@
+#include "config.h"  // Must be first to get DEBUG definition
 #include "WebConfig.h"
 #include "ConfigManager.h"
 #include "Logger.h"
@@ -6,6 +7,8 @@
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
 #include <Update.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 
 static bool restartRequested = false;
 static unsigned long restartRequestTime = 0;
@@ -15,7 +18,7 @@ bool startMDNS(const char* hostname) {
     LOG_ERROR("Failed to start mDNS");
     return false;
   }
-  
+
   MDNS.addService("http", "tcp", 80);
   LOG_INFOF("mDNS started: http://%s.local", hostname);
   return true;
@@ -26,16 +29,16 @@ bool initWebConfig(AsyncWebServer* server) {
     LOG_ERROR("Web server is null");
     return false;
   }
-  
+
   // Test route
   server->on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(200, "text/html", INDEX_HTML);
   });
-  
+
   // Get current configuration
   server->on("/api/config", HTTP_GET, [](AsyncWebServerRequest *request) {
     Config& cfg = configManager.getConfig();
-    
+
     StaticJsonDocument<2048> doc;
     doc["portalSsid"] = cfg.portalSsid;
     doc["portalPassword"] = cfg.portalPassword;
@@ -45,16 +48,15 @@ bool initWebConfig(AsyncWebServer* server) {
     doc["clockColorCharBlend"] = cfg.clockColorCharBlend;
     doc["clockColorBlending"] = cfg.clockColorBlending;
     doc["clockSecIndicatorDiff"] = cfg.clockSecIndicatorDiff;
-    doc["owmApiServer"] = cfg.owmApiServer;
-    doc["owmApiKey"] = cfg.owmApiKey;
-    doc["owmLocation"] = cfg.owmLocation;
-    doc["owmUnits"] = cfg.owmUnits;
-    doc["owmTempEnabled"] = cfg.owmTempEnabled;
-    doc["owmTempDisplayTime"] = cfg.owmTempDisplayTime;
-    doc["owmTempMin"] = cfg.owmTempMin;
-    doc["owmTempMax"] = cfg.owmTempMax;
-    doc["owmTempSchedule"] = cfg.owmTempSchedule;
-    doc["owmUpdateSchedule"] = cfg.owmUpdateSchedule;
+    doc["locationLatitude"] = cfg.locationLatitude;
+    doc["locationLongitude"] = cfg.locationLongitude;
+    doc["locationUnits"] = cfg.locationUnits;
+    doc["weatherTempEnabled"] = cfg.weatherTempEnabled;
+    doc["weatherTempDisplayTime"] = cfg.weatherTempDisplayTime;
+    doc["weatherTempMin"] = cfg.weatherTempMin;
+    doc["weatherTempMax"] = cfg.weatherTempMax;
+    doc["weatherTempSchedule"] = cfg.weatherTempSchedule;
+    doc["weatherUpdateSchedule"] = cfg.weatherUpdateSchedule;
     doc["ledBrightness"] = cfg.ledBrightness;
     doc["ledDimEnabled"] = cfg.ledDimEnabled;
     doc["ledDimBrightness"] = cfg.ledDimBrightness;
@@ -62,18 +64,18 @@ bool initWebConfig(AsyncWebServer* server) {
     doc["ledDimStartTime"] = cfg.ledDimStartTime;
     doc["ledDimEndTime"] = cfg.ledDimEndTime;
     doc["clockUpdateSchedule"] = cfg.clockUpdateSchedule;
-    
+
     String response;
     serializeJson(doc, response);
     request->send(200, "application/json", response);
   });
-  
+
   // Get schema
   server->on("/api/schema", HTTP_GET, [](AsyncWebServerRequest *request) {
     String schema = configManager.getSchema();
     request->send(200, "application/json", schema);
   });
-  
+
   // Get version info
   server->on("/api/version", HTTP_GET, [](AsyncWebServerRequest *request) {
     StaticJsonDocument<256> doc;
@@ -82,26 +84,103 @@ bool initWebConfig(AsyncWebServer* server) {
     doc["chipCores"] = ESP.getChipCores();
     doc["flashSize"] = ESP.getFlashChipSize();
     doc["freeHeap"] = ESP.getFreeHeap();
-    
+
     String response;
     serializeJson(doc, response);
     request->send(200, "application/json", response);
   });
-  
+
+  // Geolocation lookup
+  server->on("/api/geolocation", HTTP_GET, [](AsyncWebServerRequest *request) {
+    #ifdef DEBUG
+    LOG_DEBUG("Geolocation lookup requested");
+    #endif
+
+    WiFiClientSecure client;
+    client.setInsecure();
+
+    HTTPClient http;
+    http.setTimeout(5000);
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+
+    if (!http.begin(client, "https://ipapi.co/json/")) {
+      LOG_ERROR("Failed to initialize HTTPS connection");
+      request->send(500, "application/json", "{\"success\":false,\"error\":\"Connection initialization failed\"}");
+      return;
+    }
+
+    int httpCode = http.GET();
+
+    if (httpCode != HTTP_CODE_OK) {
+      LOG_ERRORF("Geolocation request failed with code %d", httpCode);
+      http.end();
+      request->send(500, "application/json", "{\"success\":false,\"error\":\"HTTP request failed\"}");
+      return;
+    }
+
+    String payload = http.getString();
+    http.end();
+
+    if (payload.length() == 0) {
+      LOG_ERROR("Empty response");
+      request->send(500, "application/json", "{\"success\":false,\"error\":\"Empty response\"}");
+      return;
+    }
+
+    // Parse JSON
+    DynamicJsonDocument doc(2048);
+    DeserializationError error = deserializeJson(doc, payload);
+    if (error) {
+      LOG_ERRORF("JSON parsing failed: %s", error.c_str());
+      request->send(500, "application/json", "{\"success\":false,\"error\":\"JSON parse error\"}");
+      return;
+    }
+
+    // Extract location data (ipapi.co format)
+    if (!doc.containsKey("latitude") || !doc.containsKey("longitude")) {
+      LOG_ERROR("Missing location data in response");
+      request->send(500, "application/json", "{\"success\":false,\"error\":\"Invalid response structure\"}");
+      return;
+    }
+
+    // Build response
+    StaticJsonDocument<512> response;
+    response["success"] = true;
+    response["latitude"] = String(doc["latitude"].as<float>(), 6);
+    response["longitude"] = String(doc["longitude"].as<float>(), 6);
+    response["city"] = doc["city"].as<String>();
+    response["postalCode"] = doc["postal"].as<String>();
+    response["region"] = doc["region"].as<String>();
+    response["country"] = doc["country_name"].as<String>();
+
+    String responseStr;
+    serializeJson(response, responseStr);
+
+    #ifdef DEBUG
+    LOG_DEBUGF("Geolocation: %s, %s (%s, %s)",
+      response["city"].as<const char*>(),
+      response["country"].as<const char*>(),
+      response["latitude"].as<const char*>(),
+      response["longitude"].as<const char*>());
+    #endif
+
+    request->send(200, "application/json", responseStr);
+  });
+
   // Update configuration
   server->on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
     [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
       StaticJsonDocument<2048> doc;
       DeserializationError error = deserializeJson(doc, data, len);
-      
+
       if (error) {
         LOG_ERROR("Failed to parse config JSON");
         request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
         return;
       }
-      
+
       Config& cfg = configManager.getConfig();
-      
+
       // Update config values from JSON
       if (doc.containsKey("portalSsid")) cfg.portalSsid = doc["portalSsid"].as<String>();
       if (doc.containsKey("portalPassword")) cfg.portalPassword = doc["portalPassword"].as<String>();
@@ -111,16 +190,15 @@ bool initWebConfig(AsyncWebServer* server) {
       if (doc.containsKey("clockColorCharBlend")) cfg.clockColorCharBlend = doc["clockColorCharBlend"];
       if (doc.containsKey("clockColorBlending")) cfg.clockColorBlending = doc["clockColorBlending"];
       if (doc.containsKey("clockSecIndicatorDiff")) cfg.clockSecIndicatorDiff = doc["clockSecIndicatorDiff"];
-      if (doc.containsKey("owmApiServer")) cfg.owmApiServer = doc["owmApiServer"].as<String>();
-      if (doc.containsKey("owmApiKey")) cfg.owmApiKey = doc["owmApiKey"].as<String>();
-      if (doc.containsKey("owmLocation")) cfg.owmLocation = doc["owmLocation"].as<String>();
-      if (doc.containsKey("owmUnits")) cfg.owmUnits = doc["owmUnits"].as<String>();
-      if (doc.containsKey("owmTempEnabled")) cfg.owmTempEnabled = doc["owmTempEnabled"];
-      if (doc.containsKey("owmTempDisplayTime")) cfg.owmTempDisplayTime = doc["owmTempDisplayTime"];
-      if (doc.containsKey("owmTempMin")) cfg.owmTempMin = doc["owmTempMin"];
-      if (doc.containsKey("owmTempMax")) cfg.owmTempMax = doc["owmTempMax"];
-      if (doc.containsKey("owmTempSchedule")) cfg.owmTempSchedule = doc["owmTempSchedule"].as<String>();
-      if (doc.containsKey("owmUpdateSchedule")) cfg.owmUpdateSchedule = doc["owmUpdateSchedule"].as<String>();
+      if (doc.containsKey("locationLatitude")) cfg.locationLatitude = doc["locationLatitude"].as<String>();
+      if (doc.containsKey("locationLongitude")) cfg.locationLongitude = doc["locationLongitude"].as<String>();
+      if (doc.containsKey("locationUnits")) cfg.locationUnits = doc["locationUnits"].as<String>();
+      if (doc.containsKey("weatherTempEnabled")) cfg.weatherTempEnabled = doc["weatherTempEnabled"];
+      if (doc.containsKey("weatherTempDisplayTime")) cfg.weatherTempDisplayTime = doc["weatherTempDisplayTime"];
+      if (doc.containsKey("weatherTempMin")) cfg.weatherTempMin = doc["weatherTempMin"];
+      if (doc.containsKey("weatherTempMax")) cfg.weatherTempMax = doc["weatherTempMax"];
+      if (doc.containsKey("weatherTempSchedule")) cfg.weatherTempSchedule = doc["weatherTempSchedule"].as<String>();
+      if (doc.containsKey("weatherUpdateSchedule")) cfg.weatherUpdateSchedule = doc["weatherUpdateSchedule"].as<String>();
       if (doc.containsKey("ledBrightness")) cfg.ledBrightness = doc["ledBrightness"];
       if (doc.containsKey("ledDimEnabled")) cfg.ledDimEnabled = doc["ledDimEnabled"];
       if (doc.containsKey("ledDimBrightness")) cfg.ledDimBrightness = doc["ledDimBrightness"];
@@ -128,7 +206,7 @@ bool initWebConfig(AsyncWebServer* server) {
       if (doc.containsKey("ledDimStartTime")) cfg.ledDimStartTime = doc["ledDimStartTime"].as<String>();
       if (doc.containsKey("ledDimEndTime")) cfg.ledDimEndTime = doc["ledDimEndTime"].as<String>();
       if (doc.containsKey("clockUpdateSchedule")) cfg.clockUpdateSchedule = doc["clockUpdateSchedule"].as<String>();
-      
+
       // Save to LittleFS
       if (configManager.saveConfig()) {
         LOG_INFO("Configuration saved successfully");
@@ -138,7 +216,7 @@ bool initWebConfig(AsyncWebServer* server) {
         request->send(500, "application/json", "{\"error\":\"Failed to save configuration\"}");
       }
     });
-  
+
   // Restart device
   server->on("/api/restart", HTTP_POST, [](AsyncWebServerRequest *request) {
     LOG_WARN("Restart requested via API");
@@ -146,7 +224,7 @@ bool initWebConfig(AsyncWebServer* server) {
     restartRequestTime = millis();
     request->send(200, "application/json", "{\"success\":true,\"message\":\"Device will restart in 2 seconds\"}");
   });
-  
+
   // OTA Update endpoint
   server->on("/api/update", HTTP_POST,
     [](AsyncWebServerRequest *request) {
@@ -171,14 +249,14 @@ bool initWebConfig(AsyncWebServer* server) {
           Update.printError(Serial);
         }
       }
-      
+
       if (len) {
         if (Update.write(data, len) != len) {
           LOG_ERROR("Failed to write OTA data");
           Update.printError(Serial);
         }
       }
-      
+
       if (final) {
         if (Update.end(true)) {
           LOG_INFOF("OTA Update finished: %u bytes", index + len);
@@ -189,7 +267,7 @@ bool initWebConfig(AsyncWebServer* server) {
       }
     }
   );
-  
+
   LOG_INFO("Web config routes initialized");
   return true;
 }

@@ -80,9 +80,9 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
         <div class="footer">
             <div id="footerMessage"></div>
             <div class="actions">
-                <button type="button" class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
-                <button type="button" class="btn btn-secondary" onclick="loadConfig()">Reload Config</button>
                 <button type="button" class="btn btn-danger" onclick="restart()">Restart Device</button>
+                <button type="button" class="btn btn-secondary" onclick="loadConfig()">Reload Config</button>
+                <button type="button" id="saveBtn" class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
             </div>
         </div>
     </div>
@@ -133,6 +133,40 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                     }
                 });
             });
+
+            // Also handle geolocation UI elements visibility based on weatherTempEnabled
+            const weatherTempEnabled = document.querySelector('[name="weatherTempEnabled"]');
+            if (weatherTempEnabled) {
+                const isEnabled = weatherTempEnabled.checked;
+                const geolocationPrivacy = document.getElementById('geolocationPrivacy');
+                const geolocationButton = document.getElementById('geolocationButton');
+                const locationInfo = document.getElementById('locationInfo');
+
+                if (geolocationPrivacy) {
+                    if (isEnabled) {
+                        geolocationPrivacy.classList.remove('hidden');
+                    } else {
+                        geolocationPrivacy.classList.add('hidden');
+                    }
+                }
+
+                if (geolocationButton) {
+                    if (isEnabled) {
+                        geolocationButton.classList.remove('hidden');
+                    } else {
+                        geolocationButton.classList.add('hidden');
+                    }
+                }
+
+                if (locationInfo) {
+                    if (isEnabled) {
+                        locationInfo.classList.remove('hidden');
+                    } else {
+                        locationInfo.classList.add('hidden');
+                        locationInfo.style.display = 'none';  // Also hide with display:none
+                    }
+                }
+            }
         }
 
         function showTab(tabId) {
@@ -283,11 +317,13 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
             // Update tab state
             const tabId = fieldToTab[fieldId];
             if (tabId && tabStates[tabId]) {
-                // Count errors in this tab
+                // Count errors in this tab (skip hidden fields)
                 let errorCount = 0;
                 schema.groups.find(g => g.id === tabId).fields.forEach(f => {
                     const fDiv = document.getElementById('field-' + f.id);
-                    if (fDiv && fDiv.querySelector('.field-error')) errorCount++;
+                    if (fDiv && !fDiv.classList.contains('hidden') && fDiv.querySelector('.field-error')) {
+                        errorCount++;
+                    }
                 });
 
                 tabStates[tabId].hasErrors = errorCount > 0;
@@ -364,6 +400,12 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
         function validateAllFields() {
             schema.groups.forEach(group => {
                 group.fields.forEach(field => {
+                    const fieldDiv = document.getElementById('field-' + field.id);
+                    // Skip validation for hidden fields
+                    if (fieldDiv && fieldDiv.classList.contains('hidden')) {
+                        return;
+                    }
+
                     const input = document.querySelector('[name="' + field.id + '"]');
                     if (input) {
                         const val = input.type === 'checkbox' ? (input.checked ? 1 : 0) : input.value;
@@ -496,6 +538,11 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 });
 
                 panelsContainer.appendChild(panel);
+
+                // Add geolocation UI for weather tab
+                if (group.id === 'weather') {
+                    addGeolocationUI(panel);
+                }
             });
 
             // Add Update tab (not part of schema)
@@ -710,7 +757,106 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
             xhr.send(formData);
         }
 
+        function addGeolocationUI(panel) {
+            // Find latitude field
+            const latField = panel.querySelector('#field-locationLatitude');
+            if (!latField) return;
+
+            // Add privacy notice BEFORE latitude field
+            const privacyDiv = document.createElement('div');
+            privacyDiv.id = 'geolocationPrivacy';
+            privacyDiv.className = 'field';  // Use same class as other fields for showIf logic
+            privacyDiv.style.marginBottom = '15px';
+            privacyDiv.style.padding = '12px';
+            privacyDiv.style.background = '#fff3cd';
+            privacyDiv.style.border = '1px solid #ffc107';
+            privacyDiv.style.borderRadius = '4px';
+            privacyDiv.style.fontSize = '13px';
+            privacyDiv.innerHTML = `
+                <strong>🔒 Privacy Notice:</strong> Location detection uses your IP address via
+                <a href="https://ipapi.co" target="_blank" style="color: #0066cc;">ipapi.co</a>
+                to find approximate coordinates. Your location is never stored on external servers.
+                You can also manually enter coordinates from
+                <a href="https://open-meteo.com/en/docs/geocoding-api" target="_blank" style="color: #0066cc;">Open-Meteo</a>.
+            `;
+            latField.insertAdjacentElement('beforebegin', privacyDiv);
+
+            // Add detect button after privacy notice, before latitude field
+            const buttonDiv = document.createElement('div');
+            buttonDiv.id = 'geolocationButton';
+            buttonDiv.className = 'field';  // Use same class as other fields for showIf logic
+            buttonDiv.style.marginBottom = '20px';
+            buttonDiv.innerHTML = `
+                <button type="button" class="btn btn-primary" onclick="detectLocation()" id="detectLocationBtn">
+                    🌍 Detect My Location
+                </button>
+            `;
+            latField.insertAdjacentElement('beforebegin', buttonDiv);
+
+            // Add location info display after button, before latitude field
+            const infoDiv = document.createElement('div');
+            infoDiv.id = 'locationInfo';
+            infoDiv.className = 'field';  // Use same class as other fields for showIf logic
+            infoDiv.style.display = 'none';
+            infoDiv.style.marginBottom = '20px';
+            infoDiv.style.padding = '12px';
+            infoDiv.style.background = '#d4edda';
+            infoDiv.style.border = '1px solid #c3e6cb';
+            infoDiv.style.borderRadius = '4px';
+            infoDiv.style.fontSize = '13px';
+            latField.insertAdjacentElement('beforebegin', infoDiv);
+        }
+
+        async function detectLocation() {
+            const btn = document.getElementById('detectLocationBtn');
+            const infoDiv = document.getElementById('locationInfo');
+            const latInput = document.querySelector('[name="locationLatitude"]');
+            const lonInput = document.querySelector('[name="locationLongitude"]');
+
+            btn.disabled = true;
+            btn.textContent = '🔄 Detecting...';
+            infoDiv.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/geolocation');
+                const result = await response.json();
+
+                if (result.success && result.latitude && result.longitude) {
+                    latInput.value = result.latitude;
+                    lonInput.value = result.longitude;
+
+                    // Trigger validation and change detection
+                    latInput.dispatchEvent(new Event('change'));
+                    lonInput.dispatchEvent(new Event('change'));
+
+                    // Show location info
+                    let locationText = '<strong>✓ Location detected:</strong> ';
+                    const parts = [];
+                    if (result.city) parts.push(result.city);
+                    if (result.postalCode) parts.push(result.postalCode);
+                    if (result.region) parts.push(result.region);
+                    if (result.country) parts.push(result.country);
+                    locationText += parts.join(', ');
+                    locationText += '<br><small>Coordinates: ' + result.latitude + ', ' + result.longitude + '</small>';
+
+                    infoDiv.innerHTML = locationText;
+                    infoDiv.style.display = 'block';
+                    showMessage('Location detected successfully', 'success');
+                } else {
+                    showMessage('Failed to detect location: ' + (result.error || 'Unknown error'), 'error');
+                }
+            } catch (e) {
+                showMessage('Failed to connect to geolocation service', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🌍 Detect My Location';
+            }
+        }
+
         async function saveConfig() {
+            const saveBtn = document.getElementById('saveBtn');
+            const originalText = saveBtn.textContent;
+
             // Check for validation errors
             const hasErrors = Object.values(tabStates).some(state => state.hasErrors);
             if (hasErrors) {
@@ -720,6 +866,10 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 alert('Please fix errors in: ' + tabsWithErrors.join(', '));
                 return;
             }
+
+            // Show saving indicator
+            saveBtn.disabled = true;
+            saveBtn.textContent = '💾 Saving...';
 
             const formData = new FormData(document.getElementById('configForm'));
             const data = {};
@@ -785,6 +935,9 @@ const char PROGMEM INDEX_HTML[] = R"rawliteral(
                 }
             } catch (e) {
                 showMessage('Failed to save configuration', 'error');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
             }
         }
 

@@ -53,17 +53,17 @@ void updateClockCallback() {
   updateBrightness(rtc);
   if (currentSecond != lastSecond) {
     lastSecond = currentSecond;
-    if (cfg.owmTempEnabled && CronHelper::shouldExecute(cfg.owmTempSchedule.c_str(), rtc)) {
+    if (cfg.weatherTempEnabled && CronHelper::shouldExecute(cfg.weatherTempSchedule.c_str(), rtc)) {
       if (!tempDisplayActive) {
         tempDisplayActive = true;
         displayTemperature();
       }
     }
-    if (cfg.owmTempEnabled && CronHelper::shouldExecute(cfg.owmUpdateSchedule.c_str(), rtc)) {
+    if (cfg.weatherTempEnabled && CronHelper::shouldExecute(cfg.weatherUpdateSchedule.c_str(), rtc)) {
       fetchWeather();
     }
   }
-  if (tempDisplayActive && (millis() - lastTempDisplayTime >= (cfg.owmTempDisplayTime * 1000))) {
+  if (tempDisplayActive && (millis() - lastTempDisplayTime >= (cfg.weatherTempDisplayTime * 1000))) {
     tempDisplayActive = false;
   }
   if (!tempDisplayActive) {
@@ -77,7 +77,7 @@ Task taskUpdateClock(100, TASK_FOREVER, &updateClockCallback);
 void setup() {
   initLogger();
   LOG_INFO("7-Segment LED Clock Starting...");
-  
+
   // Initialize configuration manager first
   if (!configManager.begin()) {
     LOG_ERROR("Failed to initialize configuration");
@@ -85,9 +85,9 @@ void setup() {
     delay(5000);
     ESP.restart();
   }
-  
+
   Config& cfg = configManager.getConfig();
-  
+
   initLEDs();
   if (!initWiFiManager()) {
     LOG_ERROR("WiFi initialization failed");
@@ -97,7 +97,7 @@ void setup() {
   }
   syncRTCWithNTP(rtc);
   setLoggerRTC(&rtc);
-  
+
   // Initialize web configuration server
   LOG_INFO("Initializing web server...");
   if (initWebConfig(&configWebServer)) {
@@ -107,7 +107,7 @@ void setup() {
     }
   }
   initBrightnessControl();
-  if (cfg.owmTempEnabled) {
+  if (cfg.weatherTempEnabled) {
     fetchWeather();
   }
   taskScheduler.addTask(taskUpdateClock);
@@ -118,14 +118,14 @@ void setup() {
 void loop() {
   static unsigned long lastRTCSync = 0;
   const unsigned long RTC_SYNC_INTERVAL = 3600000;
-  
+
   // Check for restart request
   if (isRestartRequested()) {
     LOG_WARN("Restarting device...");
     delay(100);
     ESP.restart();
   }
-  
+
   if (millis() - lastRTCSync >= RTC_SYNC_INTERVAL) {
     if (isWiFiConnected()) {
       syncRTCWithNTP(rtc);

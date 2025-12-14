@@ -1,5 +1,3 @@
-_legacy/
-
 # PlatformIO
 .pio/
 .vscode/.browse.c_cpp.db*
@@ -19,9 +17,6 @@ build/
 *.swo
 *~
 .DS_Store
-
-# Configuration files (contains sensitive data)
-include/config.h
 
 # Compiled Object files
 *.o
