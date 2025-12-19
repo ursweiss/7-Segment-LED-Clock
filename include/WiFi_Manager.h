@@ -26,7 +26,7 @@
 
 // Function declarations
 bool initWiFiManager();
-void checkWiFiStatus();
+bool checkWiFiStatus();
 bool isWiFiConnected();
 void configureNTP();
 void syncRTCWithNTP(ESP32Time& rtc);

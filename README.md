@@ -283,6 +283,7 @@ The 7-segment display supports:
 | Er02 | Configuration load/save error | LittleFS filesystem issue, may need format    |
 | Er03 | Weather API failure           | Check internet connection, verify coordinates |
 | Er04 | Unknown temperature unit      | Check Open-Meteo API response format          |
+| Er05 | WiFi disconnected             | Auto-recovery in progress, check router       |
 
 ## Task Schedule
 
@@ -313,6 +314,16 @@ The 7-segment display supports:
 
 - Open-Meteo returned an unexpected temperature unit
 - This is rare; check serial monitor for API response details
+
+### Display shows "Er05"
+
+- WiFi connection lost
+- Auto-recovery is in progress (attempts reconnection every 5-60 seconds)
+- Check your WiFi router is powered on and in range
+- Serial monitor shows reconnection attempts and status
+- After 30 seconds disconnected, performs full WiFi restart
+- If persistent, check for WiFi interference or router issues
+- Consider rebooting the ESP32 if recovery doesn't succeed after several minutes
 
 ### No temperature display
 

@@ -20,6 +20,7 @@
 #include "Weather.h"
 #include "Logger.h"
 #include "ConfigManager.h"
+#include "WiFi_Manager.h"
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
@@ -39,6 +40,13 @@ void fetchWeather() {
   // Validate coordinates are configured
   if (cfg.locationLatitude.isEmpty() || cfg.locationLongitude.isEmpty()) {
     LOG_WARN("Weather disabled: coordinates not configured");
+    return;
+  }
+
+  // Check WiFi connection before attempting request
+  if (!isWiFiConnected()) {
+    LOG_WARN("Weather fetch skipped - WiFi not connected");
+    owmTemperature = -128; // Er05 - WiFi disconnected
     return;
   }
 

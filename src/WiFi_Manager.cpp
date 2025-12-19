@@ -74,7 +74,6 @@ bool initWiFiManager() {
     return false;
   }
   drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
-  LOG_INFO("Initialize");
   displayStatus(1);
   delay(1000);
   webServer = new AsyncWebServer(HTTP_PORT);
@@ -158,12 +157,105 @@ bool initWiFiManager() {
   return false;
 }
 
-void checkWiFiStatus() {
+// WiFi reconnection state tracking
+static unsigned long lastReconnectAttempt = 0;
+static unsigned long reconnectInterval = WIFI_RECONNECT_INTERVAL_MS;
+static uint8_t reconnectAttempts = 0;
+static bool wasConnected = true;
+static unsigned long disconnectStartTime = 0;
+static bool wifiEventHandlersRegistered = false;
+
+void setupWiFiEventHandlers() {
+  if (wifiEventHandlersRegistered) return;
+
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    switch (event) {
+      case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+        LOG_WARN("WiFi disconnected event detected");
+        if (wasConnected) {
+          disconnectStartTime = millis();
+        }
+        wasConnected = false;
+        break;
+      case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+        LOG_INFO("WiFi connected event detected");
+        break;
+      case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+        LOG_INFOF("WiFi connected - IP: %s", WiFi.localIP().toString().c_str());
+        reconnectAttempts = 0;
+        reconnectInterval = WIFI_RECONNECT_INTERVAL_MS;
+        wasConnected = true;
+        disconnectStartTime = 0;
+        break;
+      default:
+        break;
+    }
+  });
+
+  wifiEventHandlersRegistered = true;
+  LOG_DEBUG("WiFi event handlers registered");
+}
+
+bool checkWiFiStatus() {
   drd->loop();
-  if (WiFi.status() != WL_CONNECTED) {
-    LOG_DEBUG("WiFi disconnected, attempting reconnect...");
-    WiFi.reconnect();
+
+  // Setup event handlers on first call
+  if (!wifiEventHandlersRegistered) {
+    setupWiFiEventHandlers();
   }
+
+  bool currentlyConnected = (WiFi.status() == WL_CONNECTED);
+  bool justRecovered = false;
+
+  // Detect reconnection
+  if (currentlyConnected && !wasConnected) {
+    LOG_INFO("WiFi connection recovered");
+    wasConnected = true;
+    reconnectAttempts = 0;
+    reconnectInterval = WIFI_RECONNECT_INTERVAL_MS;
+    disconnectStartTime = 0;
+    justRecovered = true;
+  }
+
+  // Handle disconnection
+  if (!currentlyConnected) {
+    unsigned long now = millis();
+
+    // Track when disconnection started
+    if (wasConnected) {
+      disconnectStartTime = now;
+      wasConnected = false;
+      LOG_WARN("WiFi connection lost - starting recovery");
+      displayClockface("Er05");
+    }
+
+    // Check if it's time to attempt reconnection
+    if (now - lastReconnectAttempt >= reconnectInterval) {
+      lastReconnectAttempt = now;
+      reconnectAttempts++;
+
+      unsigned long disconnectedDuration = now - disconnectStartTime;
+
+      // Full WiFi restart if disconnected too long or too many attempts
+      if (disconnectedDuration >= WIFI_FULL_RESTART_THRESHOLD || reconnectAttempts >= WIFI_MAX_RECONNECT_ATTEMPTS) {
+        LOG_WARNF("Performing full WiFi restart (attempt %d, disconnected for %lu ms)", reconnectAttempts, disconnectedDuration);
+        WiFi.disconnect(true);
+        delay(100);
+        WiFi.mode(WIFI_STA);
+        WiFi.begin();
+        reconnectAttempts = 0;
+        reconnectInterval = WIFI_RECONNECT_INTERVAL_MS;
+      } else {
+        LOG_DEBUGF("WiFi reconnect attempt %d/%d", reconnectAttempts, WIFI_MAX_RECONNECT_ATTEMPTS);
+        WiFi.reconnect();
+
+        // Exponential backoff
+        reconnectInterval = min(reconnectInterval * 2, (unsigned long)WIFI_MAX_BACKOFF_MS);
+      }
+    }
+  }
+
+  return justRecovered;
 }
 
 bool isWiFiConnected() {

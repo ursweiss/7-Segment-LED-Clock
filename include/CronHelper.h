@@ -24,16 +24,23 @@
 
 class CronHelper {
 private:
+  struct CronField {
+    uint8_t value;      // Single value or start offset for step (255 = wildcard)
+    uint8_t step;       // Step size (0 = no step, match single value only)
+    bool isWildcard;    // True if field is '*' or has wildcard step like '*/n'
+  };
+
   struct CronSchedule {
-    uint8_t second;
-    uint8_t minute;
-    uint8_t hour;
-    uint8_t day;
-    uint8_t month;
-    uint8_t weekday;
+    CronField second;
+    CronField minute;
+    CronField hour;
+    CronField day;
+    CronField month;
+    CronField weekday;
   };
   static bool parseCron(const char* cronStr, CronSchedule& schedule);
-  static bool matchField(uint8_t cronField, uint8_t currentValue);
+  static bool parseField(const char* fieldStr, CronField& field);
+  static bool matchField(const CronField& cronField, uint8_t currentValue);
 
 public:
   static bool shouldExecute(const char* cronStr, ESP32Time& rtc);

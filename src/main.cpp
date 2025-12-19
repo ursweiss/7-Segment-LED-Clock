@@ -132,6 +132,19 @@ void loop() {
     }
     lastRTCSync = millis();
   }
-  checkWiFiStatus();
+
+  // Check WiFi and handle recovery
+  bool wifiRecovered = checkWiFiStatus();
+  if (wifiRecovered) {
+    LOG_INFO("WiFi recovered - restarting services");
+    // Restart mDNS
+    if (startMDNS("ledclock")) {
+      LOG_INFO("mDNS service restarted");
+    }
+    // Immediate time sync after recovery
+    syncRTCWithNTP(rtc);
+    lastRTCSync = millis();
+  }
+
   taskScheduler.execute();
 }

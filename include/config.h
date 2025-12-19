@@ -52,7 +52,7 @@ inline String           portalSsid =                "LED-Clock-Config";         
 // Weather (Open-Meteo API)
 inline int8_t           weatherTempMin =            -40;                                // Min temperature (-99 is min possible. Value and lower temperature will be shown in blue and fades towards red if warmer)
 inline int8_t           weatherTempMax =            50;                                 // Max temperature (99 is max possible. Value and higher temperature will be shown in red and fades towards blue if colder)
-inline const char*      weatherTempSchedule =       "30 * * * * *";                     // When should the temperature be shown in "extended" cron format (see below)
+inline const char*      weatherTempSchedule =       "30 * * * * *";                     // When should the temperature be shown in "extended" cron format (at 30 seconds every minute - see below)
 
 // FastLED
 #define                 LED_PIN                     4                                   // LED data pin to use on ESP
@@ -67,6 +67,12 @@ inline const char*      weatherTempSchedule =       "30 * * * * *";             
 // Config portal
 #define                 DRD_TIMEOUT                 10                                  // Number of seconds after reset during which a subsequent reset will be considered a double reset (and enters config portal)
 #define                 DRD_ADDRESS                 0
+
+// WiFi reconnection settings
+#define                 WIFI_RECONNECT_INTERVAL_MS  5000                                // Initial retry interval (5 seconds)
+#define                 WIFI_MAX_RECONNECT_ATTEMPTS 10                                  // Max attempts before full WiFi restart
+#define                 WIFI_MAX_BACKOFF_MS         60000                               // Maximum backoff interval (1 minute)
+#define                 WIFI_FULL_RESTART_THRESHOLD 30000                               // Trigger full restart after 30 seconds disconnected
 #define                 ESP_DRD_USE_LITTLEFS        true
 #define                 ESP_DRD_USE_SPIFFS          false
 #define                 ESP_DRD_USE_EEPROM          false
@@ -89,8 +95,16 @@ inline const char*      weatherTempSchedule =       "30 * * * * *";             
 // <sec> <min> <hour> <day> <month> <day of week>
 // Cron docs: https://en.wikipedia.org/wiki/Cron#Overview
 
-// NOTE: Using ranges (e.g. 1-5) lists (e.g. 1,2,3,4,5) and step values (e.g. */5) are NOT supported
+// Supported syntax:
+//   - Wildcard: * (matches any value)
+//   - Single value: 5 (matches only that value)
+//   - Step values: */15 (every 15, starting from 0) or 5/15 (every 15, starting from 5)
+// Examples:
+//   "0 */15 * * * *"    = Every 15 minutes at 0 seconds (00:00, 00:15, 00:30, 00:45)
+//   "0 5/15 * * * *"    = Every 15 minutes starting from 05 (00:05, 00:20, 00:35, 00:50)
+//   "0 0 8/2 * * *"     = Every 2 hours starting from 8:00 (08:00, 10:00, 12:00, 14:00, etc.)
+// NOTE: Ranges (e.g. 1-5) and lists (e.g. 1,2,3,4,5) are NOT supported
 inline const char*      clockUpdateSchedule  =      "* * * * * *";                      // When to update clock. Default: Every second (SHOULD NOT be changed)
-inline const char*      weatherUpdateSchedule =     "0 5 * * * *";                      // When to update weather data. Default: 5 past every hour
+inline const char*      weatherUpdateSchedule =     "0 5/15 * * * *";                   // When to update weather data. Default: Every 15 minutes starting from 5 past every hour
 
 #endif // CONFIG_H

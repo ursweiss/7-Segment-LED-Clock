@@ -2,6 +2,7 @@
 #include "WebConfig.h"
 #include "ConfigManager.h"
 #include "Logger.h"
+#include "WiFi_Manager.h"
 #include "web_html.h"
 #include "version.h"
 #include <ESPmDNS.h>
@@ -95,6 +96,13 @@ bool initWebConfig(AsyncWebServer* server) {
     #ifdef DEBUG
     LOG_DEBUG("Geolocation lookup requested");
     #endif
+
+    // Check WiFi connection before attempting request
+    if (!isWiFiConnected()) {
+      LOG_WARN("Geolocation lookup skipped - WiFi not connected");
+      request->send(503, "application/json", "{\"success\":false,\"error\":\"WiFi not connected\"}");
+      return;
+    }
 
     WiFiClientSecure client;
     client.setInsecure();
