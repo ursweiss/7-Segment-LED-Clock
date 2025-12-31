@@ -173,6 +173,14 @@ static bool connectToWiFi() {
 
   if (WiFi.status() == WL_CONNECTED) {
     LOG_INFOF("WiFi connected - SSID: %s, IP: %s", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+
+    // Disable Access Point after successful WiFi connection
+    // AP should only be active during configuration mode (when display shows "ConF")
+    LOG_INFO("Disabling config portal AP");
+    WiFi.mode(WIFI_STA);
+    WiFi.softAPdisconnect(true);
+    LOG_INFO("AP disabled, WiFi mode set to STA");
+
     configureNTP();
     return true;
   }
