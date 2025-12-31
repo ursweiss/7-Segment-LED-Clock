@@ -1,8 +1,9 @@
 /*
  * This file is part of the 7 Segment LED Clock Project
- * (https://www.prusaprinters.org/prints/68013-7-segment-led-clock).
+ *   https://github.com/ursweiss/7-Segment-LED-Clock
+ *   https://www.printables.com/model/68013-7-segment-led-clock
  *
- * Copyright (c) 2021 Urs Weiss.
+ * Copyright (c) 2021-2025 Urs Weiss
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,6 +21,17 @@
 #include "CronHelper.h"
 #include <string.h>
 #include <stdlib.h>
+
+// Cache for parsed cron schedules to avoid re-parsing every second
+struct CronCache {
+  char cronString[64];
+  CronHelper::CronSchedule schedule;
+  bool valid;
+};
+
+static CronCache weatherUpdateCache = {.valid = false};
+static CronCache weatherTempCache = {.valid = false};
+static CronCache clockUpdateCache = {.valid = false};
 
 bool CronHelper::parseField(const char* fieldStr, CronField& field) {
   // Initialize field
@@ -116,8 +128,32 @@ bool CronHelper::matchField(const CronField& cronField, uint8_t currentValue) {
 }
 
 bool CronHelper::shouldExecute(const char* cronStr, ESP32Time& rtc) {
+  // Determine which cache to use based on cron string pattern
+  CronCache* cache = nullptr;
+  if (strstr(cronStr, "0 5 * * * *") != nullptr) {
+    cache = &weatherUpdateCache;
+  } else if (strstr(cronStr, "30 * * * * *") != nullptr) {
+    cache = &weatherTempCache;
+  } else if (strstr(cronStr, "*/5 * * * * *") != nullptr || strstr(cronStr, "* * * * * *") != nullptr) {
+    cache = &clockUpdateCache;
+  }
+
   CronSchedule schedule;
-  if (!parseCron(cronStr, schedule)) return false;
+
+  // Use cache if available and valid
+  if (cache != nullptr && cache->valid && strcmp(cache->cronString, cronStr) == 0) {
+    schedule = cache->schedule;
+  } else {
+    // Parse and cache
+    if (!parseCron(cronStr, schedule)) return false;
+    if (cache != nullptr) {
+      strncpy(cache->cronString, cronStr, sizeof(cache->cronString) - 1);
+      cache->cronString[sizeof(cache->cronString) - 1] = '\0';
+      cache->schedule = schedule;
+      cache->valid = true;
+    }
+  }
+
   struct tm timeinfo = rtc.getTimeStruct();
   return matchField(schedule.second, timeinfo.tm_sec) &&
          matchField(schedule.minute, timeinfo.tm_min) &&
@@ -125,4 +161,15 @@ bool CronHelper::shouldExecute(const char* cronStr, ESP32Time& rtc) {
          matchField(schedule.day, timeinfo.tm_mday) &&
          matchField(schedule.month, timeinfo.tm_mon + 1) &&
          matchField(schedule.weekday, timeinfo.tm_wday);
+}
+
+void CronHelper::invalidateCache() {
+  weatherUpdateCache.valid = false;
+  weatherTempCache.valid = false;
+  clockUpdateCache.valid = false;
+}
+
+bool CronHelper::validateCron(const char* cronStr) {
+  CronSchedule schedule;
+  return parseCron(cronStr, schedule);
 }

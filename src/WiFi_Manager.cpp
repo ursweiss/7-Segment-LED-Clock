@@ -1,8 +1,9 @@
 /*
  * This file is part of the 7 Segment LED Clock Project
- * (https://www.prusaprinters.org/prints/68013-7-segment-led-clock).
+ *   https://github.com/ursweiss/7-Segment-LED-Clock
+ *   https://www.printables.com/model/68013-7-segment-led-clock
  *
- * Copyright (c) 2021 Urs Weiss.
+ * Copyright (c) 2021-2025 Urs Weiss
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,6 +31,7 @@
 #include <ESPAsyncDNSServer.h>
 #include <ESP32Time.h>
 #include <time.h>
+#include <esp_task_wdt.h>
 
 // Double Reset Detector
 DoubleResetDetector* drd;
@@ -64,7 +66,8 @@ void configureNTP() {
   LOG_INFO("NTP configured");
 }
 
-bool initWiFiManager() {
+// Helper functions for WiFi initialization
+static bool initFileSystem() {
   if (FORMAT_FILESYSTEM) {
     LOG_WARN("Formatting filesystem...");
     LittleFS.format();
@@ -75,15 +78,10 @@ bool initWiFiManager() {
   }
   drd = new DoubleResetDetector(DRD_TIMEOUT, DRD_ADDRESS);
   displayStatus(1);
-  delay(1000);
-  webServer = new AsyncWebServer(HTTP_PORT);
-  dnsServer = new AsyncDNSServer();
-  wifiManager = new ESPAsync_WiFiManager(webServer, dnsServer, "LED-Clock");
-  wifiManager->setDebugOutput(false);
-  String apSSID = portalSsid;
-  String apPassword = portalPassword;
-  String storedSSID = wifiManager->WiFi_SSID();
-  String storedPass = wifiManager->WiFi_Pass();
+  return true;
+}
+
+static void loadTimezoneConfig() {
   LOG_DEBUG("Loading saved timezone");
   ClockConfig clockConfig;
   if (loadClockConfig(clockConfig)) {
@@ -97,15 +95,24 @@ bool initWiFiManager() {
   } else {
     LOG_DEBUG("No saved config file found");
   }
+}
+
+static void setupWiFiManagerPortal() {
+  webServer = new AsyncWebServer(HTTP_PORT);
+  dnsServer = new AsyncDNSServer();
+  wifiManager = new ESPAsync_WiFiManager(webServer, dnsServer, "LED-Clock");
+  wifiManager->setDebugOutput(false);
+
+  String storedSSID = wifiManager->WiFi_SSID();
+  String storedPass = wifiManager->WiFi_Pass();
+
   if (storedSSID != "" && storedPass != "") {
     LOG_INFO("Found stored WiFi credentials");
   } else {
     LOG_INFO("No stored WiFi credentials found");
-  }
-  if ((storedSSID == "") || (storedPass == "")) {
-    LOG_WARN("No stored credentials - entering config portal");
     initialConfig = true;
   }
+
   if (drd->detectDoubleReset()) {
     LOG_INFO("Double Reset Detected - entering config portal");
     initialConfig = true;
@@ -116,32 +123,46 @@ bool initWiFiManager() {
       wifiManager->setConfigPortalTimeout(15);
     }
   }
-  if (initialConfig) {
-    displayStatus(2);
-    LOG_INFOF("Starting config portal - SSID: %s, IP: 192.168.4.1", apSSID.c_str());
-    if (!wifiManager->startConfigPortal(apSSID.c_str(), apPassword.c_str())) {
-      LOG_WARN("Config portal timeout - restarting");
-      delay(3000);
-      ESP.restart();
+}
+
+static bool handleConfigPortal() {
+  displayStatus(2);
+  String apSSID = portalSsid;
+  String apPassword = portalPassword;
+  LOG_INFOF("Starting config portal - SSID: %s, IP: 192.168.4.1", apSSID.c_str());
+
+  if (!wifiManager->startConfigPortal(apSSID.c_str(), apPassword.c_str())) {
+    LOG_WARN("Config portal timeout - restarting");
+    delay(3000);
+    ESP.restart();
+  }
+
+  timezoneNameString = wifiManager->getTimezoneName();
+  LOG_DEBUGF("Timezone from portal: %s", timezoneNameString.length() > 0 ? timezoneNameString.c_str() : "EMPTY");
+
+  if (timezoneNameString.length() > 0) {
+    const char* tzResult = wifiManager->getTZ(timezoneNameString);
+    if (tzResult != nullptr && strlen(tzResult) > 0) {
+      timezoneString = String(tzResult);
+      LOG_DEBUGF("Converted to POSIX TZ: %s", timezoneString.c_str());
+
+      ClockConfig clockConfig;
+      memset(&clockConfig, 0, sizeof(ClockConfig));
+      strncpy(clockConfig.TZ_Name, timezoneNameString.c_str(), TZNAME_MAX_LEN - 1);
+      strncpy(clockConfig.TZ, timezoneString.c_str(), TIMEZONE_MAX_LEN - 1);
+      saveClockConfig(clockConfig);
+    } else {
+      LOG_ERROR("getTZ() returned null or empty");
     }
-    timezoneNameString = wifiManager->getTimezoneName();
-    LOG_DEBUGF("Timezone from portal: %s", timezoneNameString.length() > 0 ? timezoneNameString.c_str() : "EMPTY");
-    if (timezoneNameString.length() > 0) {
-      const char* tzResult = wifiManager->getTZ(timezoneNameString);
-      if (tzResult != nullptr && strlen(tzResult) > 0) {
-        timezoneString = String(tzResult);
-        LOG_DEBUGF("Converted to POSIX TZ: %s", timezoneString.c_str());
-        ClockConfig clockConfig;
-        memset(&clockConfig, 0, sizeof(ClockConfig));
-        strncpy(clockConfig.TZ_Name, timezoneNameString.c_str(), TZNAME_MAX_LEN - 1);
-        strncpy(clockConfig.TZ, timezoneString.c_str(), TIMEZONE_MAX_LEN - 1);
-        saveClockConfig(clockConfig);
-      } else {
-        LOG_ERROR("getTZ() returned null or empty");
-      }
-    }
-  } else {
+  }
+  return true;
+}
+
+static bool connectToWiFi() {
+  if (!initialConfig) {
     displayStatus(3);
+    String apSSID = portalSsid;
+    String apPassword = portalPassword;
     LOG_INFO("Connecting to saved WiFi...");
     if (!wifiManager->autoConnect(apSSID.c_str(), apPassword.c_str())) {
       LOG_ERROR("AutoConnect failed - restarting");
@@ -149,12 +170,25 @@ bool initWiFiManager() {
       ESP.restart();
     }
   }
+
   if (WiFi.status() == WL_CONNECTED) {
     LOG_INFOF("WiFi connected - SSID: %s, IP: %s", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
     configureNTP();
     return true;
   }
   return false;
+}
+
+bool initWiFiManager() {
+  if (!initFileSystem()) {
+    return false;
+  }
+  loadTimezoneConfig();
+  setupWiFiManagerPortal();
+  if (initialConfig && !handleConfigPortal()) {
+    return false;
+  }
+  return connectToWiFi();
 }
 
 // WiFi reconnection state tracking
@@ -199,6 +233,9 @@ void setupWiFiEventHandlers() {
 bool checkWiFiStatus() {
   drd->loop();
 
+  // Feed watchdog during WiFi recovery to prevent timeout
+  esp_task_wdt_reset();
+
   // Setup event handlers on first call
   if (!wifiEventHandlersRegistered) {
     setupWiFiEventHandlers();
@@ -239,10 +276,18 @@ bool checkWiFiStatus() {
       // Full WiFi restart if disconnected too long or too many attempts
       if (disconnectedDuration >= WIFI_FULL_RESTART_THRESHOLD || reconnectAttempts >= WIFI_MAX_RECONNECT_ATTEMPTS) {
         LOG_WARNF("Performing full WiFi restart (attempt %d, disconnected for %lu ms)", reconnectAttempts, disconnectedDuration);
+
+        // Feed watchdog before potentially long operation
+        esp_task_wdt_reset();
+
         WiFi.disconnect(true);
         delay(100);
         WiFi.mode(WIFI_STA);
         WiFi.begin();
+
+        // Feed watchdog after operation
+        esp_task_wdt_reset();
+
         reconnectAttempts = 0;
         reconnectInterval = WIFI_RECONNECT_INTERVAL_MS;
       } else {
@@ -265,16 +310,38 @@ bool isWiFiConnected() {
 void syncRTCWithNTP(ESP32Time& rtc) {
   LOG_INFO("Syncing RTC with NTP...");
   struct tm timeinfo;
-  if (getLocalTime(&timeinfo, 10000)) {
-    rtc.setTimeStruct(timeinfo);
-    LOG_INFOF("RTC synced: %04d-%02d-%02d %02d:%02d:%02d",
-              timeinfo.tm_year + 1900,
-              timeinfo.tm_mon + 1,
-              timeinfo.tm_mday,
-              timeinfo.tm_hour,
-              timeinfo.tm_min,
-              timeinfo.tm_sec);
-  } else {
-    LOG_ERROR("NTP sync failed - timeout");
+  const uint8_t maxRetries = 3;
+  bool synced = false;
+
+  for (uint8_t attempt = 1; attempt <= maxRetries && !synced; attempt++) {
+    if (getLocalTime(&timeinfo, 10000)) {
+      // Validate time is reasonable (after 2020-01-01)
+      if (timeinfo.tm_year + 1900 >= 2020) {
+        rtc.setTimeStruct(timeinfo);
+        LOG_INFOF("RTC synced on attempt %d: %04d-%02d-%02d %02d:%02d:%02d",
+                  attempt,
+                  timeinfo.tm_year + 1900,
+                  timeinfo.tm_mon + 1,
+                  timeinfo.tm_mday,
+                  timeinfo.tm_hour,
+                  timeinfo.tm_min,
+                  timeinfo.tm_sec);
+        synced = true;
+      } else {
+        LOG_WARNF("NTP time invalid (year %d) on attempt %d, retrying...",
+                  timeinfo.tm_year + 1900, attempt);
+        delay(1000);
+      }
+    } else {
+      LOG_WARNF("Failed to obtain time from NTP on attempt %d/%d",
+                attempt, maxRetries);
+      if (attempt < maxRetries) {
+        delay(2000);
+      }
+    }
+  }
+
+  if (!synced) {
+    LOG_ERROR("Failed to sync RTC with NTP after all retries");
   }
 }

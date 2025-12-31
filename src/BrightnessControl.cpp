@@ -1,3 +1,23 @@
+/*
+ * This file is part of the 7 Segment LED Clock Project
+ *   https://github.com/ursweiss/7-Segment-LED-Clock
+ *   https://www.printables.com/model/68013-7-segment-led-clock
+ *
+ * Copyright (c) 2021-2025 Urs Weiss
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "BrightnessControl.h"
 #include "config.h"
 #include "ConfigManager.h"
@@ -17,6 +37,11 @@ static uint8_t currentColonBrightness = 128;
 static unsigned long fadeStartMillis = 0;
 static uint8_t lastLoggedSecond = 255;
 static bool fadeCompleteLogged = false;
+
+// Cached parsed time values to avoid re-parsing every 100ms
+static int cachedDimStartSeconds = -1;
+static int cachedDimEndSeconds = -1;
+static bool timeCacheValid = false;
 
 bool parseTime(const char* timeStr, int& hours, int& minutes) {
   return sscanf(timeStr, "%d:%d", &hours, &minutes) == 2;
@@ -42,10 +67,20 @@ void initBrightnessControl() {
     currentState = NORMAL;
     currentMainBrightness = cfg.ledBrightness;
     currentColonBrightness = cfg.ledBrightness;
+    timeCacheValid = false;
     return;
   }
 
+  // Cache parsed times as seconds since midnight
+  cachedDimStartSeconds = startHours * 3600 + startMinutes * 60;
+  cachedDimEndSeconds = endHours * 3600 + endMinutes * 60;
+  timeCacheValid = true;
+
   LOG_INFOF("Brightness dimming enabled: %s-%s (fade %ds)", cfg.ledDimStartTime.c_str(), cfg.ledDimEndTime.c_str(), cfg.ledDimFadeDuration);
+}
+
+void invalidateBrightnessCache() {
+  timeCacheValid = false;
 }
 
 static bool isInTimePeriod(int currentSeconds, int startSeconds, int endSeconds) {
@@ -188,29 +223,44 @@ void updateBrightness(ESP32Time& rtc) {
   if (!cfg.ledDimEnabled) {
     currentMainBrightness = cfg.ledBrightness;
     currentColonBrightness = cfg.ledBrightness;
-    FastLED.setBrightness(cfg.ledBrightness);
+    static uint8_t lastSetBrightness = 255;
+    if (cfg.ledBrightness != lastSetBrightness) {
+      FastLED.setBrightness(cfg.ledBrightness);
+      lastSetBrightness = cfg.ledBrightness;
+    }
     return;
   }
 
-  int startHours, startMinutes, endHours, endMinutes;
-  bool validStart = parseTime(cfg.ledDimStartTime.c_str(), startHours, startMinutes);
-  bool validEnd = parseTime(cfg.ledDimEndTime.c_str(), endHours, endMinutes);
-
-  if (!validStart || !validEnd) {
-    currentMainBrightness = cfg.ledBrightness;
-    currentColonBrightness = cfg.ledBrightness;
-    FastLED.setBrightness(cfg.ledBrightness);
-    return;
+  // Use cached time values if available, otherwise parse and cache
+  if (!timeCacheValid) {
+    int startHours, startMinutes, endHours, endMinutes;
+    bool validStart = parseTime(cfg.ledDimStartTime.c_str(), startHours, startMinutes);
+    bool validEnd = parseTime(cfg.ledDimEndTime.c_str(), endHours, endMinutes);
+    if (!validStart || !validEnd) {
+      currentMainBrightness = cfg.ledBrightness;
+      currentColonBrightness = cfg.ledBrightness;
+      static uint8_t lastSetBrightness2 = 255;
+      if (cfg.ledBrightness != lastSetBrightness2) {
+        FastLED.setBrightness(cfg.ledBrightness);
+        lastSetBrightness2 = cfg.ledBrightness;
+      }
+      return;
+    }
+    cachedDimStartSeconds = startHours * 3600 + startMinutes * 60;
+    cachedDimEndSeconds = endHours * 3600 + endMinutes * 60;
+    timeCacheValid = true;
   }
 
-  int dimStart = startHours * 3600 + startMinutes * 60;
-  int dimEnd = endHours * 3600 + endMinutes * 60;
   int currentSeconds = rtc.getHour(true) * 3600 + rtc.getMinute() * 60 + rtc.getSecond();
   uint8_t currentSecond = rtc.getSecond();
 
-  calculateBrightness(currentSeconds, dimStart, dimEnd, currentSecond);
+  calculateBrightness(currentSeconds, cachedDimStartSeconds, cachedDimEndSeconds, currentSecond);
 
-  FastLED.setBrightness(currentMainBrightness);
+  static uint8_t lastSetBrightness3 = 255;
+  if (currentMainBrightness != lastSetBrightness3) {
+    FastLED.setBrightness(currentMainBrightness);
+    lastSetBrightness3 = currentMainBrightness;
+  }
 }
 
 uint8_t getCurrentMainBrightness() {

@@ -55,3 +55,6 @@ __pycache__/
 
 # Log files
 *.log
+
+# Code review reports
+docs/code-review/

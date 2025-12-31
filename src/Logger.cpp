@@ -1,8 +1,9 @@
 /*
  * This file is part of the 7 Segment LED Clock Project
- * (https://www.prusaprinters.org/prints/68013-7-segment-led-clock).
+ *   https://github.com/ursweiss/7-Segment-LED-Clock
+ *   https://www.printables.com/model/68013-7-segment-led-clock
  *
- * Copyright (c) 2021 Urs Weiss.
+ * Copyright (c) 2021-2025 Urs Weiss
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,7 +27,8 @@ static bool timestampAvailable = false;
 
 void initLogger() {
   Serial.begin(115200);
-  while (!Serial);
+  unsigned long startTime = millis();
+  while (!Serial && (millis() - startTime < 3000));  // 3 second timeout
   delay(200);
 }
 
@@ -37,22 +39,31 @@ void setLoggerRTC(ESP32Time* rtc) {
   }
 }
 
-void logMessage(LogLevel level, String message) {
+void logMessage(LogLevel level, const char* message) {
   #ifndef DEBUG
   if (level == LOG_LEVEL_DEBUG) {
     return;
   }
   #endif
   char timestamp[32];
-  if (timestampAvailable && loggerRTC != nullptr) {
-    int year = loggerRTC->getYear();
-    int month = loggerRTC->getMonth() + 1;
-    int day = loggerRTC->getDay();
-    int hour = loggerRTC->getHour(true);
-    int minute = loggerRTC->getMinute();
-    int second = loggerRTC->getSecond();
-    snprintf(timestamp, sizeof(timestamp), "[%04d-%02d-%02d %02d:%02d:%02d]",
-             year, month, day, hour, minute, second);
+  // NULL check before dereferencing RTC pointer to prevent crash
+  if (loggerRTC != nullptr && timestampAvailable) {
+    // Verify RTC still has valid epoch before accessing
+    if (loggerRTC->getEpoch() > 1000000000) {
+      int year = loggerRTC->getYear();
+      int month = loggerRTC->getMonth() + 1;
+      int day = loggerRTC->getDay();
+      int hour = loggerRTC->getHour(true);
+      int minute = loggerRTC->getMinute();
+      int second = loggerRTC->getSecond();
+      snprintf(timestamp, sizeof(timestamp), "[%04d-%02d-%02d %02d:%02d:%02d]",
+               year, month, day, hour, minute, second);
+    } else {
+      // RTC became invalid, fall back to uptime
+      timestampAvailable = false;
+      unsigned long uptime = millis();
+      snprintf(timestamp, sizeof(timestamp), "[%lu]", uptime);
+    }
   } else {
     unsigned long uptime = millis();
     snprintf(timestamp, sizeof(timestamp), "[%lu]", uptime);
@@ -83,5 +94,5 @@ void logMessageF(LogLevel level, const char* format, ...) {
   va_start(args, format);
   vsnprintf(buffer, sizeof(buffer), format, args);
   va_end(args);
-  logMessage(level, String(buffer));
+  logMessage(level, buffer);
 }

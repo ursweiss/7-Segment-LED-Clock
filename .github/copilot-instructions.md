@@ -96,3 +96,26 @@ This is an ESP32-based 7-segment RGB LED clock using PlatformIO IDE. The clock d
 - Always preserve all configuration options from legacy code
 - Follow the "one blank line separation" rule strictly
 - Remove trailing whitespace from all lines
+- This copyright notices must be preserved in all files containing own code (except `include/config.h` or any 3rd party libraries).
+  Update or add it as needed to match the following text exactly (set current year appropriately):
+  ```plain
+  /*
+   * This file is part of the 7 Segment LED Clock Project
+   *   https://github.com/ursweiss/7-Segment-LED-Clock
+   *   https://www.printables.com/model/68013-7-segment-led-clock
+   *
+   * Copyright (c) 2021-{{current_year}} Urs Weiss
+   *
+   * This program is free software: you can redistribute it and/or modify
+   * it under the terms of the GNU General Public License as published by
+   * the Free Software Foundation, version 3.
+   *
+   * This program is distributed in the hope that it will be useful, but
+   * WITHOUT ANY WARRANTY; without even the implied warranty of
+   * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+   * General Public License for more details.
+   *
+   * You should have received a copy of the GNU General Public License
+   * along with this program. If not, see <http://www.gnu.org/licenses/>.
+   */
+  ```

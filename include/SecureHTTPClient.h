@@ -18,17 +18,32 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BRIGHTNESS_CONTROL_H
-#define BRIGHTNESS_CONTROL_H
+#ifndef SECURE_HTTP_CLIENT_H
+#define SECURE_HTTP_CLIENT_H
 
-#include <ESP32Time.h>
+#include <Arduino.h>
 
-// Public API
-bool parseTime(const char* timeStr, int& hours, int& minutes);
-void initBrightnessControl();
-void updateBrightness(ESP32Time& rtc);
-uint8_t getCurrentMainBrightness();
-uint8_t getCurrentColonBrightness();
-void invalidateBrightnessCache();  // Call this when config changes
+/**
+ * Utility class for making secure HTTPS requests
+ * Centralizes TLS configuration and error handling
+ */
+class SecureHTTPClient {
+public:
+  struct Response {
+    bool success;
+    int httpCode;
+    String payload;
+    String error;
+  };
 
-#endif // BRIGHTNESS_CONTROL_H
+  /**
+   * Perform a GET request to the specified URL
+   * @param url The HTTPS URL to request
+   * @param timeout Request timeout in milliseconds (default: 5000ms)
+   * @param followRedirects Whether to follow HTTP redirects (default: false)
+   * @return Response structure with success status, HTTP code, payload, and error message
+   */
+  static Response get(const char* url, unsigned long timeout = 5000, bool followRedirects = false);
+};
+
+#endif // SECURE_HTTP_CLIENT_H

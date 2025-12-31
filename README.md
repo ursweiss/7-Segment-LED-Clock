@@ -1,10 +1,16 @@
-# 7-Segment LED Clock - PlatformIO Migration
+# 7-Segment LED Clock
 
-> **⚠️ Work in Progress**: This project is currently undergoing a complete refactoring from Arduino IDE to PlatformIO. The current codebase is functional but some features, documentation and testing are ongoing, and it may still contains some bugs. For the stable original Arduino version, see the [v1.0.0 release tag](https://github.com/ursweiss/7-Segment-LED-Clock/releases/tag/v1.0.0).
+ESP32-based LED clock with web configuration, weather integration, and auto-dimming.
 
 Arduino code for my beautiful 3D printed LED clock in a retro 7 segment display style.
 
 You can find more details about the project and all downloadable files (STL, 3MF, STEP) [on Printables.com](https://www.printables.com/model/68013-7-segment-led-clock).
+
+## Documentation
+
+- **[API Reference](docs/API.md)** - REST API endpoint documentation
+- **[Architecture Overview](docs/ARCHITECTURE.md)** - System components and data flow
+- **[Code Review Report](docs/code-review/code-review-report_2025-12-30_1.md)** - Latest comprehensive analysis (Dec 30, 2025)
 
 ## Project Structure
 

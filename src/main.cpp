@@ -1,8 +1,9 @@
 /*
  * This file is part of the 7 Segment LED Clock Project
- * (https://www.prusaprinters.org/prints/68013-7-segment-led-clock).
+ *   https://github.com/ursweiss/7-Segment-LED-Clock
+ *   https://www.printables.com/model/68013-7-segment-led-clock
  *
- * Copyright (c) 2021 Urs Weiss.
+ * Copyright (c) 2021-2025 Urs Weiss
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,6 +46,10 @@ AsyncWebServer configWebServer(80);
 uint32_t lastTempDisplayTime = 0;
 bool tempDisplayActive = false;
 uint8_t lastSecond = 255;
+
+// Task scheduler monitoring
+static unsigned long lastTaskExecute = 0;
+static uint8_t taskStallCount = 0;
 
 // Task callbacks
 void updateClockCallback() {
@@ -147,4 +152,20 @@ void loop() {
   }
 
   taskScheduler.execute();
+
+  // Monitor task scheduler health
+  unsigned long now = millis();
+  if (now - lastTaskExecute > 5000) {  // More than 5 seconds since last successful execute
+    taskStallCount++;
+    LOG_WARNF("Task scheduler stall detected (count: %d)", taskStallCount);
+
+    if (taskStallCount > 3) {
+      LOG_CRIT("Task scheduler failed - restarting device");
+      delay(100);
+      ESP.restart();
+    }
+  } else {
+    taskStallCount = 0;  // Reset on successful execution
+  }
+  lastTaskExecute = now;
 }

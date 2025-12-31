@@ -1,9 +1,33 @@
+/*
+ * This file is part of the 7 Segment LED Clock Project
+ *   https://github.com/ursweiss/7-Segment-LED-Clock
+ *   https://www.printables.com/model/68013-7-segment-led-clock
+ *
+ * Copyright (c) 2021-2025 Urs Weiss
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "ConfigManager.h"
 #include "config.h"
 #include "Logger.h"
 #include "schema.h"
+#include "LED_Clock.h"
+#include "BrightnessControl.h"
+#include "CronHelper.h"
 #include <LittleFS.h>
 #include <ArduinoJson.h>
+#include <esp_task_wdt.h>
 
 // Global instance
 ConfigManager configManager;
@@ -80,15 +104,29 @@ bool ConfigManager::loadConfig() {
     return false;
   }
 
+  // Feed watchdog before filesystem operation
+  esp_task_wdt_reset();
+
   File file = LittleFS.open("/config.json", "r");
   if (!file) {
     LOG_ERROR("Failed to open config file for reading");
+
+    // Check if filesystem is corrupted
+    LOG_WARN("Attempting filesystem check...");
+    if (!LittleFS.begin(false)) {  // Don't auto-format
+      LOG_ERROR("LittleFS filesystem corrupted - formatting...");
+      LittleFS.format();
+      LittleFS.begin(true);
+    }
     return false;
   }
 
   StaticJsonDocument<2048> doc;
   DeserializationError error = deserializeJson(doc, file);
   file.close();
+
+  // Feed watchdog after filesystem operation
+  esp_task_wdt_reset();
 
   if (error) {
     LOG_ERROR("Failed to parse config JSON");
@@ -132,11 +170,20 @@ bool ConfigManager::loadConfig() {
   config.clockUpdateSchedule = doc["clockUpdateSchedule"] | "* * * * * *";
 
   LOG_INFO("Configuration loaded successfully");
+  // Validate loaded configuration
+  if (!validateConfig()) {
+    LOG_ERROR("Configuration validation failed, using defaults");
+    loadDefaults();
+    return false;
+  }
   return true;
 }
 
 bool ConfigManager::saveConfig() {
   LOG_INFO("Saving configuration to LittleFS...");
+
+  // Feed watchdog before filesystem operation
+  esp_task_wdt_reset();
 
   StaticJsonDocument<2048> doc;
 
@@ -187,8 +234,117 @@ bool ConfigManager::saveConfig() {
   }
 
   file.close();
+
+  // Feed watchdog after filesystem operation
+  esp_task_wdt_reset();
+
+  // Invalidate caches so new config values are picked up
+  markPaletteForUpdate();
+  invalidateBrightnessCache();
+  CronHelper::invalidateCache();
+
   LOG_INFO("Configuration saved successfully");
   return true;
+}
+
+bool ConfigManager::validateConfig() {
+  bool valid = true;
+
+  // Validate brightness values (0-255)
+  if (config.ledBrightness > 255) {
+    LOG_WARNF("Invalid ledBrightness: %d, resetting to 128", config.ledBrightness);
+    config.ledBrightness = 128;
+    valid = false;
+  }
+  if (config.ledDimBrightness > 255) {
+    LOG_WARNF("Invalid ledDimBrightness: %d, resetting to 32", config.ledDimBrightness);
+    config.ledDimBrightness = 32;
+    valid = false;
+  }
+
+  // Validate clock color mode (0-2: SOLID, PALETTE, RAINBOW)
+  if (config.clockColorMode > 2) {
+    LOG_WARNF("Invalid clockColorMode: %d, resetting to 1", config.clockColorMode);
+    config.clockColorMode = 1;
+    valid = false;
+  }
+
+  // Validate palette index (0-4)
+  if (config.clockColorPaletteIndex > 4) {
+    LOG_WARNF("Invalid clockColorPaletteIndex: %d, resetting to 0", config.clockColorPaletteIndex);
+    config.clockColorPaletteIndex = 0;
+    valid = false;
+  }
+
+  // Validate blending mode (0-1)
+  if (config.clockColorBlending > 1) {
+    LOG_WARNF("Invalid clockColorBlending: %d, resetting to 1", config.clockColorBlending);
+    config.clockColorBlending = 1;
+    valid = false;
+  }
+
+  // Validate boolean flags (0-1)
+  if (config.ledDimEnabled > 1) {
+    config.ledDimEnabled = 1;
+    valid = false;
+  }
+  if (config.weatherTempEnabled > 1) {
+    config.weatherTempEnabled = 1;
+    valid = false;
+  }
+
+  // Validate temperature range (-99 to 99)
+  if (config.weatherTempMin < -99 || config.weatherTempMin > 99) {
+    LOG_WARNF("Invalid weatherTempMin: %d, resetting to -40", config.weatherTempMin);
+    config.weatherTempMin = -40;
+    valid = false;
+  }
+  if (config.weatherTempMax < -99 || config.weatherTempMax > 99) {
+    LOG_WARNF("Invalid weatherTempMax: %d, resetting to 50", config.weatherTempMax);
+    config.weatherTempMax = 50;
+    valid = false;
+  }
+  if (config.weatherTempMin >= config.weatherTempMax) {
+    LOG_WARN("weatherTempMin >= weatherTempMax, resetting to defaults");
+    config.weatherTempMin = -40;
+    config.weatherTempMax = 50;
+    valid = false;
+  }
+
+  // Validate temperature display time (1-60 seconds)
+  if (config.weatherTempDisplayTime < 1 || config.weatherTempDisplayTime > 60) {
+    LOG_WARNF("Invalid weatherTempDisplayTime: %d, resetting to 5", config.weatherTempDisplayTime);
+    config.weatherTempDisplayTime = 5;
+    valid = false;
+  }
+
+  // Validate fade duration (1-60 seconds)
+  if (config.ledDimFadeDuration < 1 || config.ledDimFadeDuration > 60) {
+    LOG_WARNF("Invalid ledDimFadeDuration: %d, resetting to 10", config.ledDimFadeDuration);
+    config.ledDimFadeDuration = 10;
+    valid = false;
+  }
+
+  // Validate time format (HH:MM)
+  if (config.ledDimStartTime.length() != 5 || config.ledDimStartTime.charAt(2) != ':') {
+    LOG_WARNF("Invalid ledDimStartTime format: %s, resetting to 22:00", config.ledDimStartTime.c_str());
+    config.ledDimStartTime = "22:00";
+    valid = false;
+  }
+  if (config.ledDimEndTime.length() != 5 || config.ledDimEndTime.charAt(2) != ':') {
+    LOG_WARNF("Invalid ledDimEndTime format: %s, resetting to 07:00", config.ledDimEndTime.c_str());
+    config.ledDimEndTime = "07:00";
+    valid = false;
+  }
+
+  // Validate units (metric/imperial)
+  if (config.locationUnits != "metric" && config.locationUnits != "imperial") {
+    LOG_WARNF("Invalid locationUnits: %s, resetting to metric", config.locationUnits.c_str());
+    config.locationUnits = "metric";
+    valid = false;
+  }
+
+  return valid;
 }
 
 void ConfigManager::resetConfig() {

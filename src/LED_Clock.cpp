@@ -1,8 +1,9 @@
 /*
  * This file is part of the 7 Segment LED Clock Project
- * (https://www.prusaprinters.org/prints/68013-7-segment-led-clock).
+ *   https://github.com/ursweiss/7-Segment-LED-Clock
+ *   https://www.printables.com/model/68013-7-segment-led-clock
  *
- * Copyright (c) 2021 Urs Weiss.
+ * Copyright (c) 2021-2025 Urs Weiss
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +22,8 @@
 #include "Logger.h"
 #include "BrightnessControl.h"
 #include "ConfigManager.h"
+#include "ColorCalculator.h"
+#include "Weather.h"
 #include <ESP32Time.h>
 
 // Global variables
@@ -39,6 +42,14 @@ bool secondIndicatorState = true;
 char displayWord[5];
 extern int8_t owmTemperature;
 extern uint32_t lastTempDisplayTime;
+
+// Cached configuration values to avoid repeated getConfig() calls
+// Non-static to allow access from ColorCalculator
+bool paletteNeedsUpdate = true;
+uint8_t cachedClockColorMode = 1;
+CRGB cachedClockColorSolid = CRGB::Green;
+uint8_t cachedClockColorCharBlend = 5;
+uint8_t cachedClockSecIndicatorDiff = 32;
 
 // 7-segment character mapping
 // 0-9: Digits, 10-16: Hex A-F, 17-18: H/h, 19: L, 20: n, 21-22: O/o
@@ -78,9 +89,23 @@ const uint8_t PROGMEM ledChar[31][7] = {
 };
 
 void updatePaletteFromConfig() {
+  if (!paletteNeedsUpdate) return;
+
   Config& cfg = configManager.getConfig();
   currentPalette = ConfigManager::getPaletteByIndex(cfg.clockColorPaletteIndex);
   currentBlending = (cfg.clockColorBlending == 1) ? LINEARBLEND : NOBLEND;
+
+  // Cache frequently accessed config values
+  cachedClockColorMode = cfg.clockColorMode;
+  cachedClockColorSolid = cfg.clockColorSolid;
+  cachedClockColorCharBlend = cfg.clockColorCharBlend;
+  cachedClockSecIndicatorDiff = cfg.clockSecIndicatorDiff;
+
+  paletteNeedsUpdate = false;
+}
+
+void markPaletteForUpdate() {
+  paletteNeedsUpdate = true;
 }
 
 void initLEDs() {
@@ -91,109 +116,59 @@ void initLEDs() {
   charBlendIndex = colorIndex;
 }
 
+// Lookup table for character mapping (O(1) instead of O(n) switch)
+static int8_t charMap[128] = {0};
+static bool charMapInitialized = false;
+
+void initCharMap() {
+  if (charMapInitialized) return;
+  charMap['A'] = 10; charMap['a'] = 10;
+  charMap['B'] = 11; charMap['b'] = 11;
+  charMap['C'] = 12; charMap['c'] = 13;
+  charMap['D'] = 14; charMap['d'] = 14;
+  charMap['E'] = 15; charMap['e'] = 15;
+  charMap['F'] = 16; charMap['f'] = 16;
+  charMap['H'] = 17; charMap['h'] = 18;
+  charMap['I'] = 1;  charMap['i'] = 1;
+  charMap['L'] = 19; charMap['l'] = 1;
+  charMap['N'] = 20; charMap['n'] = 20;
+  charMap['O'] = 21; charMap['o'] = 22;
+  charMap['P'] = 23; charMap['p'] = 23;
+  charMap['R'] = 24; charMap['r'] = 24;
+  charMap['S'] = 25; charMap['s'] = 25;
+  charMap['U'] = 26; charMap['u'] = 27;
+  charMap['z'] = 28;
+  charMap['-'] = 29;
+  charMapInitialized = true;
+}
+
 int mapChar(char character) {
-  switch (character) {
-    case 'A':
-    case 'a':
-      return 10; break;
-    case 'B':
-    case 'b':
-      return 11; break;
-    case 'C':
-      return 12; break;
-    case 'c':
-      return 13; break;
-    case 'D':
-    case 'd':
-      return 14; break;
-    case 'E':
-    case 'e':
-      return 15; break;
-    case 'F':
-    case 'f':
-      return 16; break;
-    case 'H':
-      return 17; break;
-    case 'h':
-      return 18; break;
-    case 'I':
-    case 'i':
-      return 1; break;
-    case 'L':
-      return 19; break;
-    case 'l':
-      return 1; break;
-    case 'N':
-    case 'n':
-      return 20; break;
-    case 'O':
-      return 21; break;
-    case 'o':
-      return 22; break;
-    case 'P':
-    case 'p':
-      return 23; break;
-    case 'R':
-    case 'r':
-      return 24; break;
-    case 'S':
-    case 's':
-      return 25; break;
-    case 'U':
-      return 26; break;
-    case 'u':
-      return 27; break;
-    case 'z':
-      return 28; break;
-    case '-':
-      return 29; break;
-    default:
-      return 30; break;
+  initCharMap();
+  if (character >= 0 && character < 128) {
+    int8_t mapped = charMap[(uint8_t)character];
+    return (mapped != 0) ? mapped : 30;
   }
+  return 30;
 }
 
 void toggleSecondIndicator() {
   Config& cfg = configManager.getConfig();
-  uint8_t colorCorrection = 0;
-  CRGB tmpColor;
-  CRGB tmpDarkColor;
-  darkBrightness = cfg.ledBrightness - cfg.clockSecIndicatorDiff;
-  if (darkBrightness > cfg.ledBrightness) {
-    darkBrightness = 0;
+  CRGB brightColor = ColorCalculator::calculateIndicatorColor(cfg.ledBrightness);
+
+  uint8_t dimBrightness = cfg.ledBrightness - cachedClockSecIndicatorDiff;
+  if (dimBrightness > cfg.ledBrightness) {
+    dimBrightness = 0;
   }
-  if (cfg.clockColorMode == 0) {
-    tmpColor = cfg.clockColorSolid;
-    tmpDarkColor = cfg.clockColorSolid;
-    CHSV tempColorHsv = rgb2hsv_approximate(tmpColor);
-    tempColorHsv.v = darkBrightness;
-    hsv2rgb_rainbow(tempColorHsv, tmpDarkColor);
-  } else if (cfg.clockColorMode == 1) {
-    colorCorrection = 2 * cfg.clockColorCharBlend;
-    updatePaletteFromConfig();
-    tmpColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), cfg.ledBrightness, currentBlending);
-    tmpDarkColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), darkBrightness, currentBlending);
-  }
-  if (secondIndicatorState) {
-    fill_solid(&(leds[NUM_LEDS-2]), 2, tmpDarkColor);
-  } else {
-    fill_solid(&(leds[NUM_LEDS-2]), 2, tmpColor);
-  }
+  CRGB dimColor = ColorCalculator::calculateIndicatorColor(dimBrightness);
+
+  fill_solid(&(leds[NUM_LEDS-2]), 2, secondIndicatorState ? dimColor : brightColor);
   secondIndicatorState = !secondIndicatorState;
 }
 
 void secondIndicatorOn() {
-  Config& cfg = configManager.getConfig();
-  uint8_t colorCorrection = 0;
   uint8_t currentBrightness = getCurrentMainBrightness();
-  CRGB tmpColor;
-  if (cfg.clockColorMode == 0) {
-    tmpColor = cfg.clockColorSolid;
-  } else if (cfg.clockColorMode == 1) {
-    colorCorrection = 2 * cfg.clockColorCharBlend;
-    updatePaletteFromConfig();
-    tmpColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), currentBrightness, currentBlending);
-  }
-  fill_solid(&(leds[NUM_LEDS-2]), 2, tmpColor);
+  CRGB color = ColorCalculator::calculateIndicatorColor(currentBrightness);
+  fill_solid(&(leds[NUM_LEDS-2]), 2, color);
 }
 
 void secondIndicatorOff() {
@@ -201,60 +176,62 @@ void secondIndicatorOff() {
 }
 
 void secondIndicatorDim() {
-  Config& cfg = configManager.getConfig();
-  uint8_t colorCorrection = 0;
-  CRGB tmpDarkColor;
-  darkBrightness = getCurrentColonBrightness();
-  if (cfg.clockColorMode == 0) {
-    tmpDarkColor = cfg.clockColorSolid;
-    CHSV tempColorHsv = rgb2hsv_approximate(tmpDarkColor);
-    tempColorHsv.v = darkBrightness;
-    hsv2rgb_rainbow(tempColorHsv, tmpDarkColor);
-  } else if (cfg.clockColorMode == 1) {
-    colorCorrection = 2 * cfg.clockColorCharBlend;
-    updatePaletteFromConfig();
-    tmpDarkColor = ColorFromPalette(currentPalette, (colorIndex + colorCorrection), darkBrightness, currentBlending);
-  }
-  fill_solid(&(leds[NUM_LEDS-2]), 2, tmpDarkColor);
+  uint8_t dimBrightness = getCurrentColonBrightness();
+  CRGB color = ColorCalculator::calculateIndicatorColor(dimBrightness);
+  fill_solid(&(leds[NUM_LEDS-2]), 2, color);
 }
 
 void displayCharacter(uint8_t charNum, uint8_t position, bool customize, CRGBPalette16 customPalette, uint8_t customBlendIndex) {
-  Config& cfg = configManager.getConfig();
-  if (charNum > 30) {
+  // Bounds check: character must be valid and position must not overflow LED array
+  if (charNum > 30 || position >= totalCharacters) {
+    #ifdef DEBUG
+    if (charNum > 30) {
+      LOG_WARNF("Invalid character number: %d", charNum);
+    }
+    if (position >= totalCharacters) {
+      LOG_WARNF("Invalid position: %d (max: %d)", position, totalCharacters - 1);
+    }
+    #endif
     return;
   }
+
+  // Calculate color ONCE before loop instead of 7 times
+  CRGB segmentColor;
+  if (customize) {
+    Config& cfg = configManager.getConfig();
+    segmentColor = ColorFromPalette(customPalette, customBlendIndex, cfg.ledBrightness, currentBlending);
+  } else {
+    if (cachedClockColorMode == 0) {
+      segmentColor = cachedClockColorSolid;
+    } else if (cachedClockColorMode == 1) {
+      updatePaletteFromConfig();
+      Config& cfg = configManager.getConfig();
+      segmentColor = ColorFromPalette(currentPalette, charBlendIndex, cfg.ledBrightness, currentBlending);
+    }
+  }
+
   uint8_t offset = position * segmentsPerCharacter * ledsPerSegment;
   for (int i = 0; i < segmentsPerCharacter; i++) {
-    if (customize) {
-      currentColor = ColorFromPalette(customPalette, customBlendIndex, cfg.ledBrightness, currentBlending);
-    } else {
-      if (cfg.clockColorMode == 0) {
-        currentColor = cfg.clockColorSolid;
-      } else if (cfg.clockColorMode == 1) {
-        updatePaletteFromConfig();
-        currentColor = ColorFromPalette(currentPalette, charBlendIndex, cfg.ledBrightness, currentBlending);
-      }
-    }
     if (pgm_read_byte(&ledChar[charNum][i])) {
-      fill_solid(&(leds[i*2+offset]), 2, currentColor);
+      fill_solid(&(leds[i*2+offset]), 2, segmentColor);
     } else {
       fill_solid(&(leds[i*2+offset]), 2, CRGB::Black);
     }
   }
 }
 
-void displayClockface(String word, bool customize, CRGBPalette16 customPalette, uint8_t customBlendIndex) {
+void displayClockface(const char* word, bool customize, CRGBPalette16 customPalette, uint8_t customBlendIndex) {
   uint8_t charNum;
   char singleChar;
-  uint8_t leadingBlanks = totalCharacters - word.length();
+  uint8_t wordLen = strlen(word);
+  uint8_t leadingBlanks = totalCharacters - wordLen;
   for (int i = 0; i < totalCharacters; i++) {
     if (i < leadingBlanks) {
       charNum = 30;
     } else {
-      singleChar = word.charAt(i - leadingBlanks);
+      singleChar = word[i - leadingBlanks];
       charNum = isDigit(singleChar) ? (uint8_t)singleChar - 48 : mapChar(singleChar);
-      Config& cfg = configManager.getConfig();
-      charBlendIndex += cfg.clockColorCharBlend;
+      charBlendIndex += cachedClockColorCharBlend;
     }
     displayCharacter(charNum, i, customize, customPalette, customBlendIndex);
   }
@@ -266,11 +243,18 @@ void displayTime(ESP32Time& rtc) {
   uint8_t currentSecond = rtc.getSecond();
   int currentHour = rtc.getHour(true);
   int currentMinute = rtc.getMinute();
+
+  // Bounds check: validate time values are within expected ranges
+  if (currentHour < 0 || currentHour > 23 || currentMinute < 0 || currentMinute > 59) {
+    #ifdef DEBUG
+    LOG_WARNF("Invalid time values: %02d:%02d", currentHour, currentMinute);
+    #endif
+    return;
+  }
   if (currentSecond != lastDisplaySecond) {
     lastDisplaySecond = currentSecond;
     secondIndicatorState = !secondIndicatorState;
-    Config& cfg = configManager.getConfig();
-    if (cfg.clockColorMode == 1) {
+    if (cachedClockColorMode == 1) {
       colorIndex++;
     }
   }
@@ -286,8 +270,7 @@ void displayTime(ESP32Time& rtc) {
     sprintf(displayWord, "%d%d%d%d", hourNibble10, hourNibble, minNibble10, minNibble);
   }
   displayClockface(displayWord);
-  Config& cfg = configManager.getConfig();
-  if (cfg.clockSecIndicatorDiff > 0) {
+  if (cachedClockSecIndicatorDiff > 0) {
     if (secondIndicatorState) {
       secondIndicatorOn();
     } else {
@@ -297,68 +280,82 @@ void displayTime(ESP32Time& rtc) {
   FastLED.show();
 }
 
+// Helper functions for temperature display
+static bool formatTemperatureDisplay(int8_t temp, char* output, size_t outputSize) {
+  if (isWeatherError(temp)) {
+    strncpy(output, getWeatherErrorCode(temp), outputSize - 1);
+    output[outputSize - 1] = '\0';
+    return true;
+  }
+  if (temp == static_cast<int8_t>(WeatherStatus::NotYetFetched)) {
+    return false;
+  }
+  return true;
+}
+
+static uint8_t calculateTempColorIndex(int8_t temp) {
+  Config& cfg = configManager.getConfig();
+  bool negative = temp < 0;
+
+  if (temp < cfg.weatherTempMin) {
+    return 160;
+  }
+  if (temp > cfg.weatherTempMax) {
+    return 0;
+  }
+
+  bool isMetric = (cfg.locationUnits == "metric");
+  if (negative) {
+    return map(temp, cfg.weatherTempMin, (isMetric ? -1 : 33), 160, 127);
+  } else {
+    return map(temp, (isMetric ? 0 : 32), cfg.weatherTempMax, 126, 0);
+  }
+}
+
+static void buildTempString(int8_t temp, bool isMetric, char* output) {
+  bool negative = temp < 0;
+  int8_t absTemp = negative ? -temp : temp;
+  int tempNibble10 = absTemp / 10;
+  int tempNibble = absTemp % 10;
+  char unit = isMetric ? 'C' : 'F';
+
+  if (negative && tempNibble10 < 1) {
+    sprintf(output, "%c%d%c%c", '-', tempNibble, 'z', unit);
+  } else if (negative) {
+    sprintf(output, "%c%d%c%c", '-', absTemp, 'z', unit);
+  } else if (tempNibble10 < 1) {
+    sprintf(output, "%c%d%c%c", ' ', tempNibble, 'z', unit);
+  } else {
+    sprintf(output, "%d%d%c%c", tempNibble10, tempNibble, 'z', unit);
+  }
+}
+
 void displayTemperature() {
   Config& cfg = configManager.getConfig();
 
-  // Handle error codes
-  if (owmTemperature == -127) {
-    // Weather API failure
-    displayClockface("Er03");
-    FastLED.show();
-    lastTempDisplayTime = millis();
+  if (!formatTemperatureDisplay(owmTemperature, displayWord, sizeof(displayWord))) {
     return;
   }
-  if (owmTemperature == -126) {
-    // Unrecognized temperature unit
-    displayClockface("Er04");
+
+  if (isWeatherError(owmTemperature)) {
+    displayClockface(displayWord);
     FastLED.show();
     lastTempDisplayTime = millis();
-    return;
-  }
-  if (owmTemperature == -128) {
-    // No data yet
     return;
   }
 
   secondIndicatorOff();
-  uint8_t customBlendIndex;
-  int8_t owmTemperature2 = owmTemperature;
-  bool negative = owmTemperature < 0;
-  if (owmTemperature < cfg.weatherTempMin) {
-    customBlendIndex = 160;
-  } else if (owmTemperature > cfg.weatherTempMax) {
-    customBlendIndex = 0;
-  } else if (negative) {
-    customBlendIndex = map(owmTemperature, cfg.weatherTempMin, (cfg.locationUnits == "metric" ? -1 : 33), 160, 127);
-  } else {
-    customBlendIndex = map(owmTemperature, (cfg.locationUnits == "metric" ? 0 : 32), cfg.weatherTempMax, 126, 0);
-  }
-  if (negative) {
-    owmTemperature2 = owmTemperature * -1;
-  }
-  int tempNibble10 = owmTemperature2 / 10;
-  int tempNibble = owmTemperature2 % 10;
-  if (negative && tempNibble10 < 1) {
-    // Negative single digit: -1 to -9 shows "-X"
-    sprintf(displayWord, "%c%d%c%c", '-', tempNibble, 'z', (cfg.locationUnits == "metric" ? 'C' : 'F'));
-  } else if (negative) {
-    // Negative double digit: -10 and below shows "-XX"
-    sprintf(displayWord, "%c%d%c%c", '-', owmTemperature2, 'z', (cfg.locationUnits == "metric" ? 'C' : 'F'));
-  } else if (tempNibble10 < 1) {
-    // Positive single digit: 0-9 shows " X" (space instead of leading zero)
-    sprintf(displayWord, "%c%d%c%c", ' ', tempNibble, 'z', (cfg.locationUnits == "metric" ? 'C' : 'F'));
-  } else {
-    // Positive double digit: 10+ shows "XX"
-    sprintf(displayWord, "%d%d%c%c", tempNibble10, tempNibble, 'z', (cfg.locationUnits == "metric" ? 'C' : 'F'));
-  }
+  uint8_t customBlendIndex = calculateTempColorIndex(owmTemperature);
+  bool isMetric = (cfg.locationUnits == "metric");
+  buildTempString(owmTemperature, isMetric, displayWord);
   displayClockface(displayWord, true, RainbowColors_p, customBlendIndex);
   FastLED.show();
   lastTempDisplayTime = millis();
 }
 
 void displayStatus(uint8_t messageId) {
-  String serialMessage;
-  String displayMessage;
+  const char* serialMessage;
+  const char* displayMessage;
   switch (messageId) {
     case 1:
       serialMessage = "Initialize";
@@ -372,8 +369,12 @@ void displayStatus(uint8_t messageId) {
       serialMessage = "Connecting to WiFi";
       displayMessage = "Conn";
       break;
+    default:
+      serialMessage = "Unknown status";
+      displayMessage = "----";
+      break;
   }
-  LOG_INFO(serialMessage.c_str());
+  LOG_INFO(serialMessage);
   displayClockface(displayMessage);
   FastLED.show();
 }

@@ -1,8 +1,9 @@
 /*
  * This file is part of the 7 Segment LED Clock Project
- * (https://www.prusaprinters.org/prints/68013-7-segment-led-clock).
+ *   https://github.com/ursweiss/7-Segment-LED-Clock
+ *   https://www.printables.com/model/68013-7-segment-led-clock
  *
- * Copyright (c) 2021 Urs Weiss.
+ * Copyright (c) 2021-2025 Urs Weiss
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,10 +37,11 @@ extern CRGB currentColor;
 extern uint8_t colorIndex;
 
 void updatePaletteFromConfig();
+void markPaletteForUpdate();
 void initLEDs();
 int mapChar(char character);
 void displayCharacter(uint8_t charNum, uint8_t position, bool customize = false, CRGBPalette16 customPalette = RainbowColors_p, uint8_t customBlendIndex = 0);
-void displayClockface(String word, bool customize = false, CRGBPalette16 customPalette = RainbowColors_p, uint8_t customBlendIndex = 0);
+void displayClockface(const char* word, bool customize = false, CRGBPalette16 customPalette = RainbowColors_p, uint8_t customBlendIndex = 0);
 void displayTime(ESP32Time& rtc);
 void displayTemperature();
 void displayStatus(uint8_t messageId);

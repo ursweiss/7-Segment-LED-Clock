@@ -1,3 +1,23 @@
+/*
+ * This file is part of the 7 Segment LED Clock Project
+ *   https://github.com/ursweiss/7-Segment-LED-Clock
+ *   https://www.printables.com/model/68013-7-segment-led-clock
+ *
+ * Copyright (c) 2021-2025 Urs Weiss
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "config.h"  // Must be first to get DEBUG definition
 #include "WebConfig.h"
 #include "ConfigManager.h"
@@ -5,6 +25,8 @@
 #include "WiFi_Manager.h"
 #include "web_html.h"
 #include "version.h"
+#include "CronHelper.h"
+#include "BrightnessControl.h"
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
 #include <Update.h>
@@ -104,116 +126,361 @@ bool initWebConfig(AsyncWebServer* server) {
       return;
     }
 
-    WiFiClientSecure client;
-    client.setInsecure();
-
-    HTTPClient http;
-    http.setTimeout(5000);
-    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-
-    if (!http.begin(client, "https://ipapi.co/json/")) {
-      LOG_ERROR("Failed to initialize HTTPS connection");
-      request->send(500, "application/json", "{\"success\":false,\"error\":\"Connection initialization failed\"}");
-      return;
-    }
-
-    int httpCode = http.GET();
-
-    if (httpCode != HTTP_CODE_OK) {
-      LOG_ERRORF("Geolocation request failed with code %d", httpCode);
-      http.end();
-      request->send(500, "application/json", "{\"success\":false,\"error\":\"HTTP request failed\"}");
-      return;
-    }
-
-    String payload = http.getString();
-    http.end();
-
-    if (payload.length() == 0) {
-      LOG_ERROR("Empty response");
-      request->send(500, "application/json", "{\"success\":false,\"error\":\"Empty response\"}");
-      return;
-    }
-
-    // Parse JSON
-    DynamicJsonDocument doc(2048);
-    DeserializationError error = deserializeJson(doc, payload);
-    if (error) {
-      LOG_ERRORF("JSON parsing failed: %s", error.c_str());
-      request->send(500, "application/json", "{\"success\":false,\"error\":\"JSON parse error\"}");
-      return;
-    }
-
-    // Extract location data (ipapi.co format)
-    if (!doc.containsKey("latitude") || !doc.containsKey("longitude")) {
-      LOG_ERROR("Missing location data in response");
-      request->send(500, "application/json", "{\"success\":false,\"error\":\"Invalid response structure\"}");
-      return;
-    }
-
-    // Build response
-    StaticJsonDocument<512> response;
-    response["success"] = true;
-    response["latitude"] = String(doc["latitude"].as<float>(), 6);
-    response["longitude"] = String(doc["longitude"].as<float>(), 6);
-    response["city"] = doc["city"].as<String>();
-    response["postalCode"] = doc["postal"].as<String>();
-    response["region"] = doc["region"].as<String>();
-    response["country"] = doc["country_name"].as<String>();
-
+    // Use do-while(false) pattern for guaranteed cleanup
+    WiFiClientSecure* client = nullptr;
+    HTTPClient* http = nullptr;
+    bool success = false;
     String responseStr;
-    serializeJson(response, responseStr);
 
-    #ifdef DEBUG
-    LOG_DEBUGF("Geolocation: %s, %s (%s, %s)",
-      response["city"].as<const char*>(),
-      response["country"].as<const char*>(),
-      response["latitude"].as<const char*>(),
-      response["longitude"].as<const char*>());
-    #endif
+    do {
+      client = new WiFiClientSecure();
+      if (!client) {
+        LOG_ERROR("Failed to allocate WiFiClientSecure");
+        break;
+      }
+      client->setInsecure();
 
-    request->send(200, "application/json", responseStr);
+      http = new HTTPClient();
+      if (!http) {
+        LOG_ERROR("Failed to allocate HTTPClient");
+        break;
+      }
+      http->setTimeout(5000);
+      http->setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+
+      if (!http->begin(*client, "https://ipapi.co/json/")) {
+        LOG_ERROR("Failed to initialize HTTPS connection");
+        break;
+      }
+
+      int httpCode = http->GET();
+      if (httpCode != HTTP_CODE_OK) {
+        LOG_ERRORF("Geolocation request failed with code %d", httpCode);
+        break;
+      }
+
+      String payload = http->getString();
+      if (payload.length() == 0) {
+        LOG_ERROR("Empty response");
+        break;
+      }
+
+      #ifdef DEBUG
+      LOG_DEBUGF("Geolocation response: %.100s%s", payload.c_str(), payload.length() > 100 ? "..." : "");
+      #endif
+
+      // Parse JSON
+      DynamicJsonDocument doc(2048);
+      DeserializationError error = deserializeJson(doc, payload);
+      if (error) {
+        LOG_ERRORF("JSON parsing failed: %s", error.c_str());
+        break;
+      }
+
+      // Extract and validate location data
+      if (!doc.containsKey("latitude") || !doc.containsKey("longitude")) {
+        LOG_ERROR("Missing location data in response");
+        break;
+      }
+
+      float lat = doc["latitude"].as<float>();
+      float lon = doc["longitude"].as<float>();
+
+      // Validate coordinate ranges
+      if (lat < -90.0f || lat > 90.0f || lon < -180.0f || lon > 180.0f) {
+        LOG_ERRORF("Invalid coordinates: lat=%.6f, lon=%.6f", lat, lon);
+        break;
+      }
+
+      // Build response
+      StaticJsonDocument<512> response;
+      response["success"] = true;
+      response["latitude"] = String(lat, 6);
+      response["longitude"] = String(lon, 6);
+      response["city"] = doc["city"].as<String>();
+      response["postalCode"] = doc["postal"].as<String>();
+      response["region"] = doc["region"].as<String>();
+      response["country"] = doc["country_name"].as<String>();
+
+      serializeJson(response, responseStr);
+
+      #ifdef DEBUG
+      LOG_DEBUGF("Geolocation: %s, %s (%.6f, %.6f)",
+        response["city"].as<const char*>(),
+        response["country"].as<const char*>(),
+        lat, lon);
+      #endif
+
+      success = true;
+    } while (false);
+
+    // Guaranteed cleanup
+    if (http) {
+      http->end();
+      delete http;
+    }
+    if (client) {
+      delete client;
+    }
+
+    if (success) {
+      request->send(200, "application/json", responseStr);
+    } else {
+      request->send(500, "application/json", "{\"success\":false,\"error\":\"Geolocation lookup failed\"}");
+    }
   });
 
   // Update configuration
   server->on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {}, NULL,
     [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+      // Validate total payload size before parsing
+      const size_t MAX_CONFIG_SIZE = 2048;
+
+      if (total > MAX_CONFIG_SIZE) {
+        LOG_ERRORF("Config payload too large: %d bytes (max %d)", total, MAX_CONFIG_SIZE);
+        request->send(413, "application/json",
+          "{\"error\":\"Request payload too large\"}");
+        return;
+      }
+
       StaticJsonDocument<2048> doc;
       DeserializationError error = deserializeJson(doc, data, len);
 
       if (error) {
-        LOG_ERROR("Failed to parse config JSON");
+        LOG_ERRORF("Failed to parse config JSON: %s", error.c_str());
         request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
         return;
       }
 
       Config& cfg = configManager.getConfig();
 
-      // Update config values from JSON
-      if (doc.containsKey("portalSsid")) cfg.portalSsid = doc["portalSsid"].as<String>();
-      if (doc.containsKey("portalPassword")) cfg.portalPassword = doc["portalPassword"].as<String>();
-      if (doc.containsKey("clockColorMode")) cfg.clockColorMode = doc["clockColorMode"];
+      // Validate and update config values from JSON with bounds checking
+
+      // WiFi settings - validate string lengths
+      if (doc.containsKey("portalSsid")) {
+        String ssid = doc["portalSsid"].as<String>();
+        if (ssid.length() == 0 || ssid.length() > 32) {
+          request->send(400, "application/json",
+            "{\"error\":\"portalSsid must be 1-32 characters\"}");
+          return;
+        }
+        cfg.portalSsid = ssid;
+      }
+
+      if (doc.containsKey("portalPassword")) {
+        String password = doc["portalPassword"].as<String>();
+        if (password.length() < 8 || password.length() > 63) {
+          request->send(400, "application/json",
+            "{\"error\":\"portalPassword must be 8-63 characters\"}");
+          return;
+        }
+        cfg.portalPassword = password;
+      }
+
+      // Clock settings - validate numeric ranges
+      if (doc.containsKey("clockColorMode")) {
+        uint8_t mode = doc["clockColorMode"];
+        if (mode > 2) {
+          request->send(400, "application/json",
+            "{\"error\":\"clockColorMode must be 0-2\"}");
+          return;
+        }
+        cfg.clockColorMode = mode;
+      }
+
       if (doc.containsKey("clockColorSolid")) cfg.clockColorSolid = doc["clockColorSolid"].as<uint32_t>();
-      if (doc.containsKey("clockColorPaletteIndex")) cfg.clockColorPaletteIndex = doc["clockColorPaletteIndex"];
+
+      if (doc.containsKey("clockColorPaletteIndex")) {
+        uint8_t paletteIdx = doc["clockColorPaletteIndex"];
+        if (paletteIdx > 4) {
+          request->send(400, "application/json",
+            "{\"error\":\"clockColorPaletteIndex must be 0-4\"}");
+          return;
+        }
+        cfg.clockColorPaletteIndex = paletteIdx;
+      }
+
       if (doc.containsKey("clockColorCharBlend")) cfg.clockColorCharBlend = doc["clockColorCharBlend"];
-      if (doc.containsKey("clockColorBlending")) cfg.clockColorBlending = doc["clockColorBlending"];
+
+      if (doc.containsKey("clockColorBlending")) {
+        uint8_t blending = doc["clockColorBlending"];
+        if (blending > 1) {
+          request->send(400, "application/json",
+            "{\"error\":\"clockColorBlending must be 0 or 1\"}");
+          return;
+        }
+        cfg.clockColorBlending = blending;
+      }
+
       if (doc.containsKey("clockSecIndicatorDiff")) cfg.clockSecIndicatorDiff = doc["clockSecIndicatorDiff"];
-      if (doc.containsKey("locationLatitude")) cfg.locationLatitude = doc["locationLatitude"].as<String>();
-      if (doc.containsKey("locationLongitude")) cfg.locationLongitude = doc["locationLongitude"].as<String>();
-      if (doc.containsKey("locationUnits")) cfg.locationUnits = doc["locationUnits"].as<String>();
-      if (doc.containsKey("weatherTempEnabled")) cfg.weatherTempEnabled = doc["weatherTempEnabled"];
-      if (doc.containsKey("weatherTempDisplayTime")) cfg.weatherTempDisplayTime = doc["weatherTempDisplayTime"];
-      if (doc.containsKey("weatherTempMin")) cfg.weatherTempMin = doc["weatherTempMin"];
-      if (doc.containsKey("weatherTempMax")) cfg.weatherTempMax = doc["weatherTempMax"];
-      if (doc.containsKey("weatherTempSchedule")) cfg.weatherTempSchedule = doc["weatherTempSchedule"].as<String>();
-      if (doc.containsKey("weatherUpdateSchedule")) cfg.weatherUpdateSchedule = doc["weatherUpdateSchedule"].as<String>();
+
+      // Weather settings - validate coordinates
+      if (doc.containsKey("locationLatitude")) {
+        String lat = doc["locationLatitude"].as<String>();
+        if (lat.length() > 20) {
+          request->send(400, "application/json",
+            "{\"error\":\"locationLatitude too long\"}");
+          return;
+        }
+        cfg.locationLatitude = lat;
+      }
+
+      if (doc.containsKey("locationLongitude")) {
+        String lon = doc["locationLongitude"].as<String>();
+        if (lon.length() > 20) {
+          request->send(400, "application/json",
+            "{\"error\":\"locationLongitude too long\"}");
+          return;
+        }
+        cfg.locationLongitude = lon;
+      }
+
+      if (doc.containsKey("locationUnits")) {
+        String units = doc["locationUnits"].as<String>();
+        if (units != "metric" && units != "imperial") {
+          request->send(400, "application/json",
+            "{\"error\":\"locationUnits must be 'metric' or 'imperial'\"}");
+          return;
+        }
+        cfg.locationUnits = units;
+      }
+
+      if (doc.containsKey("weatherTempEnabled")) {
+        uint8_t enabled = doc["weatherTempEnabled"];
+        if (enabled > 1) {
+          request->send(400, "application/json",
+            "{\"error\":\"weatherTempEnabled must be 0 or 1\"}");
+          return;
+        }
+        cfg.weatherTempEnabled = enabled;
+      }
+
+      if (doc.containsKey("weatherTempDisplayTime")) {
+        uint8_t displayTime = doc["weatherTempDisplayTime"];
+        if (displayTime == 0 || displayTime > 60) {
+          request->send(400, "application/json",
+            "{\"error\":\"weatherTempDisplayTime must be 1-60 seconds\"}");
+          return;
+        }
+        cfg.weatherTempDisplayTime = displayTime;
+      }
+
+      if (doc.containsKey("weatherTempMin")) {
+        int8_t tempMin = doc["weatherTempMin"];
+        if (tempMin < -99 || tempMin > 98) {
+          request->send(400, "application/json",
+            "{\"error\":\"weatherTempMin must be -99 to 98\"}");
+          return;
+        }
+        cfg.weatherTempMin = tempMin;
+      }
+
+      if (doc.containsKey("weatherTempMax")) {
+        int8_t tempMax = doc["weatherTempMax"];
+        if (tempMax < -98 || tempMax > 99) {
+          request->send(400, "application/json",
+            "{\"error\":\"weatherTempMax must be -98 to 99\"}");
+          return;
+        }
+        cfg.weatherTempMax = tempMax;
+      }
+
+      // Validate cron expressions
+      if (doc.containsKey("weatherTempSchedule")) {
+        String cronStr = doc["weatherTempSchedule"].as<String>();
+        if (cronStr.length() > 50) {
+          request->send(400, "application/json",
+            "{\"error\":\"weatherTempSchedule too long\"}");
+          return;
+        }
+        if (!CronHelper::validateCron(cronStr.c_str())) {
+          request->send(400, "application/json",
+            "{\"error\":\"Invalid cron expression in weatherTempSchedule\"}");
+          return;
+        }
+        cfg.weatherTempSchedule = cronStr;
+      }
+
+      if (doc.containsKey("weatherUpdateSchedule")) {
+        String cronStr = doc["weatherUpdateSchedule"].as<String>();
+        if (cronStr.length() > 50) {
+          request->send(400, "application/json",
+            "{\"error\":\"weatherUpdateSchedule too long\"}");
+          return;
+        }
+        if (!CronHelper::validateCron(cronStr.c_str())) {
+          request->send(400, "application/json",
+            "{\"error\":\"Invalid cron expression in weatherUpdateSchedule\"}");
+          return;
+        }
+        cfg.weatherUpdateSchedule = cronStr;
+      }
+
+      // LED settings - validate ranges
       if (doc.containsKey("ledBrightness")) cfg.ledBrightness = doc["ledBrightness"];
-      if (doc.containsKey("ledDimEnabled")) cfg.ledDimEnabled = doc["ledDimEnabled"];
+
+      if (doc.containsKey("ledDimEnabled")) {
+        uint8_t enabled = doc["ledDimEnabled"];
+        if (enabled > 1) {
+          request->send(400, "application/json",
+            "{\"error\":\"ledDimEnabled must be 0 or 1\"}");
+          return;
+        }
+        cfg.ledDimEnabled = enabled;
+      }
+
       if (doc.containsKey("ledDimBrightness")) cfg.ledDimBrightness = doc["ledDimBrightness"];
-      if (doc.containsKey("ledDimFadeDuration")) cfg.ledDimFadeDuration = doc["ledDimFadeDuration"];
-      if (doc.containsKey("ledDimStartTime")) cfg.ledDimStartTime = doc["ledDimStartTime"].as<String>();
-      if (doc.containsKey("ledDimEndTime")) cfg.ledDimEndTime = doc["ledDimEndTime"].as<String>();
-      if (doc.containsKey("clockUpdateSchedule")) cfg.clockUpdateSchedule = doc["clockUpdateSchedule"].as<String>();
+
+      if (doc.containsKey("ledDimFadeDuration")) {
+        uint8_t fadeDuration = doc["ledDimFadeDuration"];
+        if (fadeDuration == 0 || fadeDuration > 120) {
+          request->send(400, "application/json",
+            "{\"error\":\"ledDimFadeDuration must be 1-120 seconds\"}");
+          return;
+        }
+        cfg.ledDimFadeDuration = fadeDuration;
+      }
+
+      // Validate time format (HH:MM)
+      if (doc.containsKey("ledDimStartTime")) {
+        String timeStr = doc["ledDimStartTime"].as<String>();
+        int hours, minutes;
+        if (!parseTime(timeStr.c_str(), hours, minutes) ||
+            hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+          request->send(400, "application/json",
+            "{\"error\":\"Invalid time format in ledDimStartTime (use HH:MM)\"}");
+          return;
+        }
+        cfg.ledDimStartTime = timeStr;
+      }
+
+      if (doc.containsKey("ledDimEndTime")) {
+        String timeStr = doc["ledDimEndTime"].as<String>();
+        int hours, minutes;
+        if (!parseTime(timeStr.c_str(), hours, minutes) ||
+            hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+          request->send(400, "application/json",
+            "{\"error\":\"Invalid time format in ledDimEndTime (use HH:MM)\"}");
+          return;
+        }
+        cfg.ledDimEndTime = timeStr;
+      }
+
+      // Validate clock update schedule
+      if (doc.containsKey("clockUpdateSchedule")) {
+        String cronStr = doc["clockUpdateSchedule"].as<String>();
+        if (cronStr.length() > 50) {
+          request->send(400, "application/json",
+            "{\"error\":\"clockUpdateSchedule too long\"}");
+          return;
+        }
+        if (!CronHelper::validateCron(cronStr.c_str())) {
+          request->send(400, "application/json",
+            "{\"error\":\"Invalid cron expression in clockUpdateSchedule\"}");
+          return;
+        }
+        cfg.clockUpdateSchedule = cronStr;
+      }
 
       // Save to LittleFS
       if (configManager.saveConfig()) {

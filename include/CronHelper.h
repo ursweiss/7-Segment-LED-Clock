@@ -1,8 +1,9 @@
 /*
  * This file is part of the 7 Segment LED Clock Project
- * (https://www.prusaprinters.org/prints/68013-7-segment-led-clock).
+ *   https://github.com/ursweiss/7-Segment-LED-Clock
+ *   https://www.printables.com/model/68013-7-segment-led-clock
  *
- * Copyright (c) 2021 Urs Weiss.
+ * Copyright (c) 2021-2025 Urs Weiss
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,14 +17,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-
 #ifndef CRONHELPER_H
 #define CRONHELPER_H
 
 #include <ESP32Time.h>
 
 class CronHelper {
-private:
+public:
   struct CronField {
     uint8_t value;      // Single value or start offset for step (255 = wildcard)
     uint8_t step;       // Step size (0 = no step, match single value only)
@@ -38,12 +38,16 @@ private:
     CronField month;
     CronField weekday;
   };
+
+  // Validation method (public for use in WebConfig)
+  static bool validateCron(const char* cronStr);
+  static bool shouldExecute(const char* cronStr, ESP32Time& rtc);
+  static void invalidateCache();  // Call this when config changes
+
+private:
   static bool parseCron(const char* cronStr, CronSchedule& schedule);
   static bool parseField(const char* fieldStr, CronField& field);
   static bool matchField(const CronField& cronField, uint8_t currentValue);
-
-public:
-  static bool shouldExecute(const char* cronStr, ESP32Time& rtc);
 };
 
 #endif
