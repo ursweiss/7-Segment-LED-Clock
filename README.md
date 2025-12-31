@@ -6,6 +6,57 @@ Arduino code for my beautiful 3D printed LED clock in a retro 7 segment display 
 
 You can find more details about the project and all downloadable files (STL, 3MF, STEP) [on Printables.com](https://www.printables.com/model/68013-7-segment-led-clock).
 
+## Quick Start
+
+This is the easiest and fastest way to get the LED Clock up and running.<br />
+I currently don't provide a dedicated web flasher, but this may is comming in the future.
+
+For now you can use this guide to flash an ESP32.<br />
+(After the first installation you can update the firmware from the Config Portal)
+
+### Initial flashing
+
+1. Download the latest `bootloader.bin`, `partitions.bin` and `LedClock_YYYY-MM-DD_HHmm.bin` from [Releases](https://github.com/ursweiss/7-Segment-LED-Clock/releases)
+1. Connect the ESP to your computer over USB
+1. Open [ESP Tool](https://espressif.github.io/esptool-js/) (Chrome or Edge browser)
+1. Set baudrate to 115'200, click "Connect" and select the port of the ESP (e.g. cu.usbserial-0001 on a Mac)
+1. Add the three files as follows:
+   - 0x1000: `bootloader.bin`
+   - 0x8000: `partitions.bin`
+   - 0x10000: `LedClock_YYYY-MM-DD_HHmm.bin`
+1. Click "Program" and wait until flashing is finished (Hard resetting via RTS pin...)
+
+### Config WiFi
+
+1. Connect to the WiFi SSID "LED-Clock-Config"
+   - If the SSID doesn't show up, try to restart it
+1. Usually the portal should show up automatically
+   - If not, open a browser and connect to 192.168.4.1
+1. Click "Configuration"
+1. Select your SSID and set the password
+   - You can set two different WiFi networks, which will try to connect to one of them.<br/>
+     Usually you will configure one network only.
+1. Click "Save" to connect the LED Clock to your WiFI network
+
+### Config LED Clock
+
+1. With a device in the same network, you now should be able to connect to http://ledclock.local
+1. Configure the clock as needed using the Config Portal
+
+### Update firmware
+
+To update a runnig LED Clock to the newest firmware version, you will only need to download the latest `LedClock_YYYY-MM-DD_HHmm.bin` from [Releases](https://github.com/ursweiss/7-Segment-LED-Clock/releases)
+
+1. Access the Config Portal: http://ledclock.local
+1. Click on "Update", select the downloaded file and click "Upadte Firmware"
+
+## ESP32
+
+I mostly use "ESP-WROOM-32 Devkit" as microcontroller for my projects (I may will move to ESP32-C5 in the future as this is the only ESP also supporting 5 GHz WiFi atm.)
+
+If you buy one (e.g. from AliExpress) make sure you get the correct one. It must be the 30-pin version which usually has a yellow cpacitor (many other ESP32 should wok too, but I only test with this variant):<br />
+![ESP-WROOM-32 Devkit](docs/images/esp-wroom-32-devkit.png)
+
 ## Documentation
 
 - **[API Reference](docs/API.md)** - REST API endpoint documentation
