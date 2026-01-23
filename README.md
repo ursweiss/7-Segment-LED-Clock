@@ -8,13 +8,22 @@ You can find more details about the project and all downloadable files (STL, 3MF
 
 ## Quick Start
 
-This is the easiest and fastest way to get the LED Clock up and running.<br />
-I currently don't provide a dedicated web flasher, but this may is comming in the future.
+This is the easiest and fastest way to get the LED Clock up and running.
 
-For now you can use this guide to flash an ESP32.<br />
-(After the first installation you can update the firmware from the Config Portal)
+### Web Flasher (Recommended)
 
-### Initial flashing
+Use the **[Web Flasher](https://ursweiss.github.io/7-Segment-LED-Clock/)** to install the firmware directly from your browser — no downloads or tools required!
+
+1. Open the [Web Flasher](https://ursweiss.github.io/7-Segment-LED-Clock/) in Chrome, Edge, Brave, or Opera
+1. Connect your ESP32 via USB
+1. Click "Install" and select the serial port
+1. Wait for the installation to complete
+
+The web flasher includes a detailed setup guide for WiFi configuration.
+
+### Manual Flashing (Alternative)
+
+If you prefer manual installation or the web flasher doesn't work for you:
 
 1. Download the latest `bootloader.bin`, `partitions.bin` and `LedClock_YYYY-MM-DD_HHmm.bin` from [Releases](https://github.com/ursweiss/7-Segment-LED-Clock/releases)
 1. Connect the ESP to your computer over USB

@@ -1,0 +1,25 @@
+{
+  "name": "7-Segment LED Clock",
+  "version": "latest",
+  "home_assistant_domain": "",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "fw/esp32/bootloader.bin",
+          "offset": 4096
+        },
+        {
+          "path": "fw/esp32/partitions.bin",
+          "offset": 32768
+        },
+        {
+          "path": "fw/esp32/application.bin",
+          "offset": 65536
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Web-based firmware installer for the 7-Segment LED Clock ESP32 project. Flash your ESP32 directly from your browser.">
+  <title>7-Segment LED Clock - Web Flasher</title>
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <style>
+    /* === Base Styles === */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      line-height: 1.6;
+    }
+
+    /* === Header === */
+    header {
+      background: #2c3e50;
+      color: #fff;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      opacity: 0.9;
+      font-size: 1.1rem;
+    }
+
+    /* === Container === */
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    /* === Warning Box === */
+    .browser-warning {
+      background: #3d3000;
+      border: 1px solid #ffc107;
+      border-radius: 8px;
+      padding: 1rem 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      color: #ffd966;
+    }
+
+    .browser-warning .icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .browser-warning strong {
+      color: #ffc107;
+    }
+
+    /* === Install Section === */
+    .install-section {
+      background: #2d2d2d;
+      border: 1px solid #404040;
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      margin-bottom: 2rem;
+    }
+
+    .install-section h2 {
+      color: #fff;
+      margin-bottom: 1rem;
+    }
+
+    .install-section p {
+      color: #b0b0b0;
+      margin-bottom: 1.5rem;
+    }
+
+    /* === ESP Web Tools Button === */
+    esp-web-install-button {
+      display: block;
+      margin: 0 auto;
+      --esp-tools-button-text-color: #fff;
+      --esp-tools-button-color: #3498db;
+      --esp-tools-button-border-radius: 9999px;
+    }
+
+    /* === Guide Section === */
+    .guide-section {
+      background: #2d2d2d;
+      border: 1px solid #404040;
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      margin-bottom: 2rem;
+    }
+
+    .guide-section h2 {
+      color: #fff;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid #3498db;
+    }
+
+    .guide-section h3 {
+      color: #fff;
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .guide-section p {
+      color: #d0d0d0;
+      margin-bottom: 1rem;
+    }
+
+    .guide-section ol,
+    .guide-section ul {
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .guide-section li {
+      margin-bottom: 0.5rem;
+    }
+
+    .guide-section a {
+      color: #3498db;
+      text-decoration: none;
+    }
+
+    .guide-section a:hover {
+      text-decoration: underline;
+    }
+
+    /* === Step Number Badge === */
+    .step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: #3498db;
+      color: #fff;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 0.9rem;
+      margin-right: 0.5rem;
+    }
+
+    /* === Info Boxes === */
+    .info-box {
+      background: #1a3a4a;
+      border-left: 4px solid #3498db;
+      padding: 1rem;
+      margin: 1rem 0;
+      border-radius: 0 8px 8px 0;
+      color: #c0d9e8;
+    }
+
+    .info-box.success {
+      background: #1a3a2a;
+      border-color: #27ae60;
+      color: #c0e8d0;
+    }
+
+    .info-box.warning {
+      background: #3d3000;
+      border-color: #ffc107;
+      color: #ffd966;
+    }
+
+    /* === Credential Box === */
+    .credential-box {
+      background: #252525;
+      border: 1px solid #404040;
+      border-radius: 8px;
+      padding: 1rem;
+      margin: 1rem 0;
+      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+    }
+
+    .credential-box .label {
+      color: #888;
+      font-size: 0.85rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .credential-box .value {
+      font-size: 1.1rem;
+      color: #3498db;
+      font-weight: 600;
+    }
+
+    /* === Troubleshooting Box === */
+    .troubleshooting {
+      background: #3d3000;
+      border: 1px solid #665500;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .troubleshooting h3 {
+      color: #ffc107;
+      margin-top: 0;
+      margin-bottom: 1rem;
+    }
+
+    .troubleshooting ul {
+      margin-bottom: 0;
+      color: #ffd966;
+    }
+
+    /* === Code Elements === */
+    code {
+      background: #1e1e1e;
+      border: 1px solid #404040;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+      font-size: 0.9em;
+      color: #3498db;
+    }
+
+    /* === Footer === */
+    footer {
+      text-align: center;
+      padding: 2rem;
+      color: #888;
+      font-size: 0.9rem;
+    }
+
+    footer a {
+      color: #3498db;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+      color: #5dade2;
+    }
+
+    /* === Responsive Design === */
+    @media (max-width: 600px) {
+      .container {
+        padding: 1rem;
+      }
+
+      header {
+        padding: 1.5rem 1rem;
+      }
+
+      header h1 {
+        font-size: 1.5rem;
+      }
+
+      .install-section,
+      .guide-section {
+        padding: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🕐 7-Segment LED Clock</h1>
+    <p>Easy firmware installation for your ESP32 LED Clock</p>
+  </header>
+
+  <div class="container">
+    <div class="browser-warning">
+      <span class="icon">⚠️</span>
+      <div>
+        <strong>Browser Requirement:</strong> This installer requires a Chromium-based browser with Web Serial support.
+        Please use <strong>Google Chrome</strong>, <strong>Microsoft Edge</strong>, <strong>Brave</strong>, or <strong>Opera</strong>.
+        Firefox and Safari are not supported.
+      </div>
+    </div>
+
+    <section class="install-section">
+      <h2>Install Firmware</h2>
+      <p>Connect your ESP32 via USB and click the button below to start the installation.</p>
+      <esp-web-install-button manifest="manifest.json"></esp-web-install-button>
+    </section>
+
+    <section class="guide-section">
+      <h2>📋 Quick Start Guide</h2>
+
+      <h3><span class="step-number">1</span> Prerequisites</h3>
+      <ul>
+        <li>ESP32-WROOM-32 DevKit (30-pin version recommended)</li>
+        <li>USB cable (data-capable, not charge-only)</li>
+        <li>Chrome, Edge, Brave, or Opera browser</li>
+      </ul>
+
+      <h3><span class="step-number">2</span> Flash the Firmware</h3>
+      <ol>
+        <li>Connect your ESP32 to your computer via USB</li>
+        <li>Click the <strong>"Install"</strong> button above</li>
+        <li>Select the serial port of your ESP32 (e.g., "cu.usbserial-0001" on Mac or "COM3" on Windows)</li>
+        <li>Wait for the installation to complete (about 1-2 minutes)</li>
+      </ol>
+
+      <div class="info-box success">
+        <strong>✅ Success!</strong> After flashing, the display will show <code>Load</code> briefly, then <code>ConF</code> to indicate it's ready for WiFi configuration.
+      </div>
+
+      <h3><span class="step-number">3</span> Connect to WiFi</h3>
+      <p>After flashing, the LED Clock creates its own WiFi network for initial setup:</p>
+
+      <div class="credential-box">
+        <div class="label">WiFi Network Name (SSID)</div>
+        <div class="value">LED-Clock-Config</div>
+      </div>
+      <div class="credential-box">
+        <div class="label">WiFi Password</div>
+        <div class="value">ledclock</div>
+      </div>
+
+      <ol>
+        <li>On your phone or computer, connect to the <code>LED-Clock-Config</code> WiFi network</li>
+        <li>A configuration page should open automatically</li>
+        <li>If it doesn't, open a browser and go to <code>192.168.4.1</code></li>
+        <li>Click <strong>"Configuration"</strong></li>
+        <li>Select your home WiFi network and enter the password</li>
+        <li>Click <strong>"Save"</strong></li>
+      </ol>
+
+      <div class="info-box">
+        The LED Clock will restart and connect to your WiFi. The display will show the current time once connected.
+      </div>
+
+      <h3><span class="step-number">4</span> Configure Your Clock</h3>
+      <p>Once connected to your WiFi, access the configuration portal to customize your clock:</p>
+
+      <div class="credential-box">
+        <div class="label">Configuration Portal Address</div>
+        <div class="value">http://ledclock.local</div>
+      </div>
+
+      <p>From the configuration portal you can:</p>
+      <ul>
+        <li>Adjust LED brightness and colors</li>
+        <li>Enable weather/temperature display</li>
+        <li>Set automatic dimming schedules</li>
+        <li>Update firmware over WiFi (OTA)</li>
+      </ul>
+
+      <div class="info-box warning">
+        <strong>Note:</strong> If <code>ledclock.local</code> doesn't work, check your router's DHCP client list for the device's IP address. Some networks don't support mDNS.
+      </div>
+
+      <div class="troubleshooting">
+        <h3>🔧 Troubleshooting</h3>
+        <ul>
+          <li><strong>No serial port appears:</strong> Try a different USB cable — some cables are charge-only and don't support data transfer.</li>
+          <li><strong>Installation fails:</strong> Hold the <strong>BOOT</strong> button on your ESP32 while clicking "Install", release after the process starts.</li>
+          <li><strong>"LED-Clock-Config" WiFi not visible:</strong> Press the reset button on your ESP32, or press it twice quickly to force the config portal.</li>
+          <li><strong>Can't connect to ledclock.local:</strong> Use the IP address instead. Check your router's connected devices list.</li>
+          <li><strong>Display shows "Er01":</strong> WiFi connection failed. Press reset twice within 10 seconds to re-enter WiFi setup.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="guide-section">
+      <h2>🔄 Updating Firmware</h2>
+      <p>After the initial installation, you can update the firmware wirelessly:</p>
+      <ol>
+        <li>Download the latest <code>.bin</code> file from <a href="https://github.com/ursweiss/7-Segment-LED-Clock/releases" target="_blank">GitHub Releases</a></li>
+        <li>Open <code>http://ledclock.local</code></li>
+        <li>Go to the <strong>"Update"</strong> section</li>
+        <li>Select the downloaded file and click <strong>"Update Firmware"</strong></li>
+      </ol>
+    </section>
+  </div>
+
+  <footer>
+    <p>
+      <a href="https://github.com/ursweiss/7-Segment-LED-Clock" target="_blank">GitHub Repository</a> •
+      <a href="https://www.printables.com/model/68013-7-segment-led-clock" target="_blank">3D Print Files on Printables</a>
+    </p>
+    <p>© 2021-2026 Urs Weiss • Licensed under GPL-3.0</p>
+  </footer>
+
+  <script>
+    /**
+     * Injects custom button styles into the ESP Web Tools shadow DOM
+     * to override default styling with project-specific design.
+     */
+    function injectButtonStyles(shadowRoot) {
+      // Avoid duplicate injection
+      if (shadowRoot.querySelector('#custom-button-styles')) {
+        return;
+      }
+
+      const style = document.createElement('style');
+      style.id = 'custom-button-styles';
+      style.textContent = `
+        button {
+          position: relative !important;
+          cursor: pointer !important;
+          font-size: 25px !important;
+          font-weight: 700 !important;
+          padding: 15px 44px !important;
+          color: #fff !important;
+          background-color: #3498db !important;
+          border: none !important;
+          border-radius: 9999px !important;
+          box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4) !important;
+          transition: all 0.3s ease !important;
+        }
+
+        button:hover {
+          background-color: #2980b9 !important;
+          transform: translateY(-2px) !important;
+          box-shadow: 0 6px 16px rgba(52, 152, 219, 0.5) !important;
+        }
+
+        button:active {
+          transform: translateY(0) !important;
+        }
+      `;
+      shadowRoot.appendChild(style);
+    }
+
+    // Monitor DOM for the custom element and inject styles when available
+    const observer = new MutationObserver(() => {
+      const installButton = document.querySelector('esp-web-install-button');
+      if (installButton && installButton.shadowRoot) {
+        injectButtonStyles(installButton.shadowRoot);
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Also attempt immediate injection if element already exists
+    customElements.whenDefined('esp-web-install-button').then(() => {
+      const installButton = document.querySelector('esp-web-install-button');
+      if (installButton && installButton.shadowRoot) {
+        injectButtonStyles(installButton.shadowRoot);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -47,6 +47,30 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
+### Automate Web Flasher Firmware Updates
+
+**Category:** DevOps
+**Effort:** Small
+**Description:** Create a GitHub Actions workflow to automatically copy PlatformIO build outputs to the web flasher directory on tagged releases.
+
+**Implementation:**
+
+- Create `.github/workflows/release.yml` workflow
+- Trigger on new tag push (e.g., `v*`)
+- Build firmware with PlatformIO
+- Copy build outputs to `flasher/fw/esp32/`:
+  - `.pio/build/esp32dev/bootloader.bin` → `flasher/fw/esp32/bootloader.bin`
+  - `.pio/build/esp32dev/partitions.bin` → `flasher/fw/esp32/partitions.bin`
+  - `.pio/build/esp32dev/firmware.bin` → `flasher/fw/esp32/application.bin`
+- Commit and push changes to main branch
+- Optionally create GitHub Release with attached binaries
+
+**Files to create:**
+
+- `.github/workflows/release.yml`
+
+______________________________________________________________________
+
 ## 🟡 High Priority
 
 ### Implement API Authentication
